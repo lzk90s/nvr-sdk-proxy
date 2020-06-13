@@ -18,12 +18,19 @@ using json = nlohmann::json;
 
 static Logger logger("hik_nvr");
 
+#define SUFFIX(msg) std::string("[{}] ").append(msg)
+#define STUB_LLOG_DEBUG(fmt, ...) LLOG_DEBUG(logger, SUFFIX(fmt), (this)->ip_, ##__VA_ARGS__)
+#define STUB_LLOG_INFO(fmt, ...) LLOG_INFO(logger, SUFFIX(fmt), (this)->ip_, ##__VA_ARGS__)
+#define STUB_LLOG_WARN(fmt, ...) LLOG_WARN(logger, SUFFIX(fmt), this->ip_, ##__VA_ARGS__)
+#define STUB_LLOG_ERROR(fmt, ...) LLOG_ERROR(logger, SUFFIX(fmt), this->ip_, ##__VA_ARGS__)
+
+
 #define CHECK(method_call, msg)                                                         \
 do {                                                                                    \
     BOOL __result = FALSE;                                                              \
     if ((__result= (method_call)) != TRUE) {                                            \
         DWORD err = NET_DVR_GetLastError();                                             \
-        LLOG_ERROR(logger, "Call sdk error, result [{}] - {}", err, msg); return err;   \
+        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", err, msg); return err;   \
     }                                                                                   \
 } while (0)
 
@@ -32,7 +39,7 @@ do {                                                                            
     BOOL __result = FALSE;                                                              \
     if ((__result= (method_call)) != TRUE) {                                            \
         DWORD err = NET_DVR_GetLastError();                                             \
-        LLOG_ERROR(logger, "Call sdk error, result [{}] - {}", err, msg); return err;   \
+        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", err, msg); return err;   \
         (defer)();                                                                      \
     }                                                                                   \
 } while (0)
@@ -113,6 +120,8 @@ SdkStubImpl::~SdkStubImpl() {
 int32_t SdkStubImpl::Login(const std::string &ip, const std::string &user, const std::string &password) {
     int ret = 0;
 
+    this->ip_ = ip;
+
     NET_DVR_USER_LOGIN_INFO loginInfo = { 0 };
     strncpy(loginInfo.sDeviceAddress, ip.c_str(), NET_DVR_DEV_ADDRESS_MAX_LEN - 1);
     loginInfo.wPort = GetPort();
@@ -124,7 +133,7 @@ int32_t SdkStubImpl::Login(const std::string &ip, const std::string &user, const
     handle_ = NET_DVR_Login_V40(&loginInfo, &devInfo);
     if ((LONG)handle_ < 0) {
         ret = NET_DVR_GetLastError();
-        LLOG_ERROR(logger, "Failed to login {}, ret {}", ip, ret);
+        STUB_LLOG_ERROR("Failed to login {}, ret {}", ip, ret);
         return ret;
     }
 
@@ -132,9 +141,9 @@ int32_t SdkStubImpl::Login(const std::string &ip, const std::string &user, const
     startChan_ = devInfo.struDeviceV30.byStartChan;
     ip_ = ip;
 
-    LLOG_INFO(logger, "Succeed to login {}, handle {}", ip, handle_);
-    LLOG_INFO(logger, "SerialNumber={}, DVRType={}, ChannelNum={}", devInfo.struDeviceV30.sSerialNumber,
-              devInfo.struDeviceV30.byDVRType, channelNum_);
+    STUB_LLOG_INFO("Succeed to login {}, handle {}", ip, handle_);
+    STUB_LLOG_INFO("SerialNumber={}, DVRType={}, ChannelNum={}", devInfo.struDeviceV30.sSerialNumber,
+                   devInfo.struDeviceV30.byDVRType, channelNum_);
 
     return 0;
 }
@@ -163,7 +172,7 @@ int32_t SdkStubImpl::QueryDevice(std::vector<Device> &devices) {
             dev.id = std::to_string(i);
             dev.name = std::string("Camera_") + std::to_string(i);
             dev.ip = ip_;
-            LLOG_INFO(logger, "(1)Found channel, id={}, name={}, ip={}", dev.id, dev.name, dev.ip);
+            STUB_LLOG_INFO("(1)Found channel, id={}, name={}, ip={}", dev.id, dev.name, dev.ip);
             devices.push_back(dev);
         }
     } else { //支持IP接入，9000设备
@@ -176,7 +185,7 @@ int32_t SdkStubImpl::QueryDevice(std::vector<Device> &devices) {
                     dev.id = std::to_string(iChannelIdx);
                     dev.name = getChannelName(iChannelIdx);
                     dev.ip = ip_;
-                    LLOG_INFO(logger, "(2)Found channel, id={}, name={}, ip={}", dev.id, dev.name, dev.ip);
+                    STUB_LLOG_INFO("(2)Found channel, id={}, name={}, ip={}", dev.id, dev.name, dev.ip);
                     devices.push_back(dev);
                 }
             }
@@ -191,7 +200,7 @@ int32_t SdkStubImpl::QueryDevice(std::vector<Device> &devices) {
                 dev.id = std::to_string(iChannelIdx);
                 dev.name = getChannelName(iChannelIdx);
                 dev.ip = ipAccessCfg.struIPDevInfo[i].struIP.sIpV4;
-                LLOG_INFO(logger, "(3)Found channel, id={}, name={}, ip={}", dev.id, dev.name, dev.ip);
+                STUB_LLOG_INFO("(3)Found channel, id={}, name={}, ip={}", dev.id, dev.name, dev.ip);
                 devices.push_back(dev);
             }
         }
@@ -200,7 +209,7 @@ int32_t SdkStubImpl::QueryDevice(std::vector<Device> &devices) {
     return 0;
 }
 
-typedef struct tagRealPlayInfo {
+typedef struct tagRealPlayInfo : public CallbackClosure {
     LONG playHandle;
     SdkStub::OnRealPlayData fn;
 
@@ -210,7 +219,7 @@ typedef struct tagRealPlayInfo {
     }
 } RealPlayContext;
 
-void CALLBACK previewDataCallback (LONG lPlayHandle, DWORD dwDataType, BYTE *pBuffer, DWORD dwBufSize, void *pUser) {
+void CALLBACK previewDataCallback(LONG lPlayHandle, DWORD dwDataType, BYTE *pBuffer, DWORD dwBufSize, void *pUser) {
     RealPlayContext *context = (RealPlayContext *)pUser;
     if (nullptr == context || nullptr == context->fn) {
         return;
@@ -231,10 +240,11 @@ int32_t SdkStubImpl::StartRealStream(const std::string &devId, OnRealPlayData on
     LONG playHandle = NET_DVR_RealPlay_V40(handle_, &previewInfo, previewDataCallback, (void *)context.get());
     if (playHandle < 0) {
         int ret = NET_DVR_GetLastError();
-        LLOG_ERROR(logger, "NET_DVR_RealPlay_V40 error, ret = {}", ret);
+        STUB_LLOG_ERROR("NET_DVR_RealPlay_V40 error, ret = {}", ret);
         return ret;
     }
 
+    context->thisClass = this;
     context->playHandle = playHandle;
     jobId = (intptr_t)context.get();
     context.release();
@@ -249,7 +259,7 @@ int32_t SdkStubImpl::StopRealStream(intptr_t &jobId) {
         NET_DVR_StopRealPlay(context->playHandle);
     }
 
-    LLOG_INFO(logger, "Stop real play succeed, playId {}", context->playHandle);
+    STUB_LLOG_INFO("Stop real play succeed, playId {}", context->playHandle);
 
     return 0;
 }
@@ -266,7 +276,7 @@ int32_t SdkStubImpl::QueryRecord(const std::string &devId, const TimePoint &star
     LONG findHandle = NET_DVR_FindFile_V50(handle_, &fileCond);
     if (findHandle < 0) {
         DWORD ret = NET_DVR_GetLastError();
-        LLOG_ERROR(logger, "Failed to find file for dev {}, ret {}", devId, ret);
+        STUB_LLOG_ERROR("Failed to find file for dev {}, ret {}", devId, ret);
         return ret;
     }
 
@@ -295,10 +305,9 @@ int32_t SdkStubImpl::QueryRecord(const std::string &devId, const TimePoint &star
 }
 
 //playback closure
-typedef struct tagPlaybackInfo {
+typedef struct tagPlaybackInfo: public CallbackClosure {
     intptr_t downloadId;
     SdkStub::OnDownloadData fn;
-    void *thisClass;
     std::string file;
     CppTime::Timer timer;
     bool complete;
@@ -312,7 +321,7 @@ typedef struct tagPlaybackInfo {
 } PlaybackContext;
 
 static void CALLBACK downloadDataCallBack(LONG lPlayHandle, DWORD dwDataType, BYTE *pBuffer, DWORD dwBufSize,
-                                          void *pUser) {
+        void *pUser) {
     PlaybackContext *context = static_cast<PlaybackContext *>(pUser);
     if (nullptr != context) {
         context->fn(lPlayHandle, pBuffer, dwBufSize);
@@ -320,7 +329,7 @@ static void CALLBACK downloadDataCallBack(LONG lPlayHandle, DWORD dwDataType, BY
 }
 
 int32_t SdkStubImpl::DownloadRecordByTime(const std::string &devId, const TimePoint &startTime,
-                                          const TimePoint &endTime, OnDownloadData onData, intptr_t &jobId) {
+        const TimePoint &endTime, OnDownloadData onData, intptr_t &jobId) {
     //new context
     std::unique_ptr<PlaybackContext> context(new PlaybackContext());
     context->fn = onData;
@@ -336,7 +345,7 @@ int32_t SdkStubImpl::DownloadRecordByTime(const std::string &devId, const TimePo
     context->downloadId = NET_DVR_GetFileByTime_V40(handle_, (char *)context->file.c_str(), &downloadCond);
     if (0 > context->downloadId) {
         DWORD err = NET_DVR_GetLastError();
-        LLOG_ERROR(logger, "NET_DVR_GetFileByTime_V40 error {}", err);
+        STUB_LLOG_ERROR("NET_DVR_GetFileByTime_V40 error {}", err);
         return err;
     }
 
@@ -348,18 +357,18 @@ int32_t SdkStubImpl::DownloadRecordByTime(const std::string &devId, const TimePo
     // period check the download position
     PlaybackContext *playContextPtr = context.get();
     auto interval = std::chrono::milliseconds(100);
-    context->timer.add(interval, [playContextPtr](CppTime::timer_id) {
+    context->timer.add(interval, [playContextPtr, this](CppTime::timer_id) {
         if (!playContextPtr->complete) {
-            if (100 == NET_DVR_GetDownloadPos(playContextPtr->downloadId) ) {
-                LLOG_INFO(logger, "Record download 100%, downloadId {}", playContextPtr->downloadId);
+            if (100 == NET_DVR_GetDownloadPos(playContextPtr->downloadId)) {
+                STUB_LLOG_INFO("Record download 100%, downloadId {}", playContextPtr->downloadId);
                 playContextPtr->complete = true;
                 playContextPtr->fn(playContextPtr->downloadId, nullptr, 0);
             }
         }
     }, interval);
 
-    LLOG_INFO(logger, "Downloading file for dev {} between {} and {}, downloadId {}", devId, startTime.ToString(),
-              endTime.ToString(), context->downloadId);
+    STUB_LLOG_INFO("Downloading file for dev {} between {} and {}, downloadId {}", devId, startTime.ToString(),
+                   endTime.ToString(), context->downloadId);
 
     jobId = (intptr_t)context.get();
     context.release();  // 释放控制权
@@ -371,7 +380,7 @@ int32_t SdkStubImpl::StopDownloadRecord(intptr_t &jobId) {
     std::unique_ptr<PlaybackContext> context((PlaybackContext *)jobId); // auto delete
     if (nullptr != context) {
         if (context->downloadId >= 0) {
-            LLOG_INFO(logger, "Stop download file, downloadId {}", context->downloadId);
+            STUB_LLOG_INFO("Stop download file, downloadId {}", context->downloadId);
             CHECK(NET_DVR_StopGetFile(context->downloadId), "NET_DVR_StopGetFile");
             unlink(context->file.c_str());
         }
@@ -380,10 +389,9 @@ int32_t SdkStubImpl::StopDownloadRecord(intptr_t &jobId) {
     return 0;
 }
 
-typedef struct tagEventContext {
+typedef struct tagEventContext: public CallbackClosure {
     LONG handle;
     SdkStub::OnAnalyzeData fn;
-    void *thisClass;
     void *userData;
 
     tagEventContext() {
@@ -395,6 +403,7 @@ typedef struct tagEventContext {
 
 static std::map<LONG, EventContext *> alarmContextMapping;
 
+
 static BOOL alarmMsgCallback(LONG lCommand, LONG lUserID, char *pBuf, DWORD dwBufLen) {
     EventContext *context = nullptr;
     //double check
@@ -404,15 +413,22 @@ static BOOL alarmMsgCallback(LONG lCommand, LONG lUserID, char *pBuf, DWORD dwBu
         }
     }
 
-    if (nullptr == context || nullptr == context->fn || nullptr == pBuf) {
+    SdkStubImpl *thisClass = (SdkStubImpl *)(context)->thisClass;
+    return thisClass->AlarmMsgCallback(lCommand, pBuf, dwBufLen, (intptr_t)context);
+}
+
+bool SdkStubImpl::AlarmMsgCallback(int64_t cmd, char *buffer, int64_t bufferLen, intptr_t userData) {
+    EventContext *context = (EventContext *)userData;
+
+    if (nullptr == context || nullptr == context->fn || nullptr == buffer) {
         return FALSE;
     }
 
-    LLOG_INFO(logger, "Received alarm, type {}, handle {}", lCommand, lUserID);
+    STUB_LLOG_INFO("Received alarm, type {}", cmd);
 
-    switch (lCommand) {
+    switch (cmd) {
     case COMM_ALARM_RULE: {
-        NET_VCA_RULE_ALARM &struVcaRuleAlarm = *((NET_VCA_RULE_ALARM *)pBuf);
+        NET_VCA_RULE_ALARM &struVcaRuleAlarm = *((NET_VCA_RULE_ALARM *)buffer);
         uint8_t *imgData = (uint8_t *)struVcaRuleAlarm.pImage;
         uint32_t imgLen = (uint32_t)struVcaRuleAlarm.dwPicDataLen;
 
@@ -438,7 +454,7 @@ static BOOL alarmMsgCallback(LONG lCommand, LONG lUserID, char *pBuf, DWORD dwBu
             ObjectLeftEvent obj;
             obj.ruleName = csRuleName;
             obj.dateTime = getCurrentDateTime();
-            context->fn(lCommand, AlarmEventType::OBJECT_LEFT, ((json)obj).dump(), imgData, imgLen, context->userData);
+            context->fn(cmd, AlarmEventType::OBJECT_LEFT, ((json)obj).dump(), imgData, imgLen, context->userData);
             break;
         }
         default: {
@@ -461,7 +477,7 @@ int32_t SdkStubImpl::StartEventAnalyze(const std::string &devId, OnAnalyzeData o
     context->thisClass = this;
     context->userData = userData;
 
-    LLOG_INFO(logger, "Start event analyze, devId {}, ip {}", devId, this->ip_);
+    STUB_LLOG_INFO("Start event analyze, devId {}, ip {}", devId, this->ip_);
 
     NET_DVR_SetDVRMessCallBack_EX(alarmMsgCallback);
 
@@ -478,7 +494,7 @@ int32_t SdkStubImpl::StartEventAnalyze(const std::string &devId, OnAnalyzeData o
     context->handle = NET_DVR_SetupAlarmChan_V41(handle_, &struSetupParam);
     if (context->handle < 0) {
         int ret = NET_DVR_GetLastError();
-        LLOG_ERROR(logger, "NET_DVR_SetupAlarmChan_V50 failed, ret {}", ret);
+        STUB_LLOG_ERROR("NET_DVR_SetupAlarmChan_V50 failed, ret {}", ret);
         return ret;
     }
 
@@ -494,7 +510,7 @@ int32_t SdkStubImpl::StartEventAnalyze(const std::string &devId, OnAnalyzeData o
 int32_t SdkStubImpl::StopEventAnalyze(intptr_t &jobId) {
     std::unique_ptr<EventContext> context((EventContext *)jobId); // auto delete
     if (context->handle >= 0) {
-        LLOG_INFO(logger, "Stop event analyze succeed, jobId {}", jobId);
+        STUB_LLOG_INFO("Stop event analyze succeed, jobId {}", jobId);
         CHECK(NET_DVR_CloseAlarmChan_V30(context->handle), "NET_DVR_CloseAlarmChan_V30");
     }
     alarmContextMapping.erase((LONG)this->handle_);

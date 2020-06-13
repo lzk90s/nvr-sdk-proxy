@@ -2,6 +2,7 @@
 
 #include <string>
 #include <cstdint>
+#include <exception>
 
 #include "leveldb/db.h"
 
@@ -14,6 +15,9 @@ public:
         leveldb::Options options;
         options.create_if_missing = true;
         leveldb::Status status = leveldb::DB::Open(options, path, &db_);
+        // if (!status.ok()) {
+        //     throw std::runtime_error(status.ToString());
+        // }
         assert(status.ok());
     }
 

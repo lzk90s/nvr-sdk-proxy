@@ -11,7 +11,7 @@ namespace sdk {
 
 using json = nlohmann::json;
 
-void to_json(json& j, const RecordInfo &p) {
+void to_json(json &j, const RecordInfo &p) {
     j["fileName"] = p.fileName;
     j["fileSize"] = p.fileSize;
     j["startTime"] = p.startTime.ToString();
@@ -49,7 +49,7 @@ void from_json(const json &j, FtpInfo &p) {
 
 void to_json(json &j, const Object &p) {
     j["id"] = p.id;
-    j["type"]= p.type;
+    j["type"] = p.type;
     j["subType"] = p.subType;
     j["rect"] = p.rect;
     j["text"] = p.text;
@@ -127,9 +127,8 @@ void to_json(json &j, const AcsEvent &p) {
     j["openMethod"] = p.openMethod;
 }
 
-void to_json(json &j, const ThirdPartyEventObject &p) {
-    j["type"] = p.type;
-    j["data"] = p.data;
+void to_json(json &j, const GatherEvent &p) {
+    j["action"] = p.action;
 }
 
 }

@@ -13,8 +13,8 @@ namespace sdk {
 
 typedef struct tagTimePoint {
     int32_t year, month, day, hour, minute, second;
-    const char* TIME_STRING_FORMAT = "%04d-%02d-%02d %02d:%02d:%02d";
-    const char* TIME_FORMAT = "%Y-%m-%d %H:%M:%S";
+    const char *TIME_STRING_FORMAT = "%04d-%02d-%02d %02d:%02d:%02d";
+    const char *TIME_FORMAT = "%Y-%m-%d %H:%M:%S";
 
     tagTimePoint() {
         year = month = day = hour = minute = second = 0;
@@ -26,7 +26,7 @@ typedef struct tagTimePoint {
         return std::string(t);
     }
 
-    struct tagTimePoint & FromString(const std::string &s) {
+    struct tagTimePoint &FromString(const std::string &s) {
         sscanf(s.c_str(), TIME_STRING_FORMAT, &year, &month, &day, &hour, &minute, &second);
         return *this;
     }
@@ -76,23 +76,18 @@ enum AlarmEventType {
     //非法停车，对应IllegalParkingInfo
     ILLEGAL_PARKING = 0,
     //交通抓拍结果，对应VehicleCaptureEvent
-    VEHICLE_CAPTURE,
+    VEHICLE_CAPTURE = 1,
     //人流量，对应VisitorsFlowRateEvent
-    VISITORS_FLOWRATE,
+    VISITORS_FLOWRATE = 2,
     //物品遗留
-    OBJECT_LEFT,
+    OBJECT_LEFT = 3,
     //道闸出入记录
-    BARRIER_GATE,
+    BARRIER_GATE = 4,
     //门禁出入记录
-    DOOR,
+    DOOR = 5,
+    //人员聚集
+    GATHER = 6,
 };
-
-typedef struct tagThirdPartyEventObject {
-    //事件类型
-    AlarmEventType type;
-    //事件数据，json
-    std::string data;
-} ThirdPartyEventObject;
 
 typedef struct tagBaseEvent {
 } BaseEvent;
@@ -262,6 +257,10 @@ typedef struct tagAcsEvent : public BaseEvent {
     //开门方式
     std::string openMethod;
 } AcsEvent;
+
+typedef struct tagGatherEvent : public BaseEvent {
+    int32_t action;
+} GatherEvent;
 
 }
 }

@@ -13,6 +13,11 @@
 namespace sdkproxy {
 namespace sdk {
 
+class CallbackClosure {
+public:
+    void *thisClass;
+};
+
 class SdkStub {
 public:
     using OnDownloadData = std::function<void(intptr_t id, const uint8_t *buffer, int32_t bufferLen)>;
@@ -57,7 +62,7 @@ public:
     }
 
     int32_t QueryDeviceCache(std::vector<Device> &devices) {
-        deviceCache_.setQueryFunc([&](const std::string &k, Cache<std::vector<Device>>::Value &v) {
+        deviceCache_.setQueryFunc([&](const std::string & k, Cache<std::vector<Device>>::Value & v) {
             return QueryDevice(v.value);
         });
 
@@ -126,6 +131,13 @@ public:
             const TimePoint &startTime, const TimePoint &endTime, std::vector<VisitorsFlowRateHistory> &histories) {
         return -1;
     }
+
+    virtual int32_t SnapPicture(const std::string &devId, uint8_t *imgBuf, uint32_t &imgBufSize) {
+        return -1;
+    }
+
+protected:
+    std::string ip_;
 
 private:
     std::string vendor_;

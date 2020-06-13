@@ -14,11 +14,17 @@ using json = nlohmann::json;
 
 static Logger logger("dahua");
 
+#define SUFFIX(msg) std::string("[{}] ").append(msg)
+#define STUB_LLOG_DEBUG(fmt, ...) LLOG_DEBUG(logger, SUFFIX(fmt), (this)->ip_, ##__VA_ARGS__)
+#define STUB_LLOG_INFO(fmt, ...) LLOG_INFO(logger, SUFFIX(fmt), (this)->ip_, ##__VA_ARGS__)
+#define STUB_LLOG_WARN(fmt, ...) LLOG_WARN(logger, SUFFIX(fmt), this->ip_, ##__VA_ARGS__)
+#define STUB_LLOG_ERROR(fmt, ...) LLOG_ERROR(logger, SUFFIX(fmt), this->ip_, ##__VA_ARGS__)
+
 #define CHECK(method_call, msg)                                                     \
 do {                                                                                \
     int __result=0;                                                                 \
     if (( __result= (method_call)) != 0) {                                          \
-        LLOG_ERROR(logger, "Call sdk error, result [{}] - {}", __result, msg);      \
+        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", __result, msg);      \
         return __result;                                                            \
     }                                                                               \
 } while (0)
@@ -27,7 +33,7 @@ do {                                                                            
 do {                                                                                \
     int __result=0;                                                                 \
     if (( __result= (method_call)) != 0) {                                          \
-        LLOG_ERROR(logger, "Call sdk error, result [{}] - {}", __result, msg);      \
+        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", __result, msg);      \
         (defer)();                                                                  \
         return __result;                                                            \
     }                                                                               \
@@ -37,7 +43,7 @@ do {                                                                            
 do {                                                                                \
     if (((method_call)) != TRUE) {                                                  \
         DWORD __result = PLAY_GetLastError(port);                                   \
-        LLOG_ERROR(logger, "Call sdk error, result [{}] - {}", __result, msg);      \
+        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", __result, msg);      \
         return __result;                                                            \
     }                                                                               \
 } while (0)
@@ -46,7 +52,7 @@ do {                                                                            
 do {                                                                                \
     if (((method_call)) != TRUE) {                                                  \
         DWORD __result = PLAY_GetLastError(port);                                   \
-        LLOG_ERROR(logger, "Call sdk error, result [{}] - {}", __result, msg);      \
+        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", __result, msg);      \
         (defer)();                                                                  \
         return __result;                                                            \
     }                                                                               \
@@ -91,6 +97,7 @@ int32_t SdkStubImpl::QueryDevice(std::vector<Device> &devices) {
 }
 
 int32_t SdkStubImpl::Login(const std::string &ip, const std::string &user, const std::string &password) {
+    this->ip_ = ip;
 
     CHECK(DPSDK_Create(DPSDK_CORE_SDK_SERVER, handle_), "DPSDK_Create");
 
@@ -105,7 +112,7 @@ int32_t SdkStubImpl::Login(const std::string &ip, const std::string &user, const
     CHECK(DPSDK_SetLog(handle_, dpsdk_log_level_e::DPSDK_LOG_LEVEL_INFO, "/var/log/dpsdk.log",
                        true, false), "DPSDK_SetLog");
 
-    LLOG_INFO(logger, "Succeed to login {}, handle {}", ip, handle_);
+    STUB_LLOG_INFO("Succeed to login {}, handle {}", ip, handle_);
 
     return 0;
 }
@@ -115,7 +122,7 @@ int32_t SdkStubImpl::Logout() {
     return 0;
 }
 
-typedef struct tagRealPlayInfo {
+typedef struct tagRealPlayInfo : public CallbackClosure {
     int32_t realSeq;
     int32_t port;
     SdkStub::OnRealPlayData fn;
@@ -151,6 +158,7 @@ int32_t SdkStubImpl::StartRealStream(const std::string &devId, OnRealPlayData on
     LOG_DEBUG("StartRealStream: devId {}", devId);
 
     context->fn = onData;
+    context->thisClass = this;
 
     //获取实时流
     Get_RealStream_Info_t realInfo = { 0 };
@@ -163,7 +171,7 @@ int32_t SdkStubImpl::StartRealStream(const std::string &devId, OnRealPlayData on
     CHECK(DPSDK_GetRealStream(handle_, nRealSeq, &realInfo, mediaDataCallback, (void *)context.get()),
           "DPSDK_GetRealStream");
 
-    LLOG_INFO(logger, "Start real play succeed, playId {}", nRealSeq);
+    STUB_LLOG_INFO("Start real play succeed, playId {}", nRealSeq);
 
     context->realSeq = nRealSeq;
     jobId = (intptr_t)context.get();
@@ -179,7 +187,7 @@ int32_t SdkStubImpl::StopRealStream(intptr_t &jobId) {
         DPSDK_CloseRealStreamBySeq(handle_, context->realSeq);
     }
 
-    LLOG_INFO(logger, "Stop real play succeed, playId {}", context->realSeq);
+    STUB_LLOG_INFO("Stop real play succeed, playId {}", context->realSeq);
 
     return 0;
 }
@@ -219,13 +227,13 @@ int32_t SdkStubImpl::QueryRecord(const std::string &devId, const TimePoint &star
 }
 
 int32_t SdkStubImpl::DownloadRecordByTime(const std::string &devId, const TimePoint &startTime,
-                                          const TimePoint &endTime, OnDownloadData onData, intptr_t &jobId) {
-    LLOG_ERROR(logger, "Unimplemented method");
+        const TimePoint &endTime, OnDownloadData onData, intptr_t &jobId) {
+    STUB_LLOG_ERROR("Unimplemented method");
     return -1;
 }
 
 int32_t SdkStubImpl::StopDownloadRecord(intptr_t &jobId) {
-    LLOG_ERROR(logger, "Unimplemented method");
+    STUB_LLOG_ERROR("Unimplemented method");
     return -1;
 }
 
@@ -263,7 +271,7 @@ int32_t SdkStubImpl::createNodeDep(const std::string &depId, int nType, std::fun
         strcpy(pGetChannelInfo->szDeviceId, pGetDepInfo->pDeviceInfo[i].szId);
         pGetChannelInfo->nEncChannelChildCount = pGetDepInfo->pDeviceInfo[i].nEncChannelChildCount;
         std::unique_ptr<Enc_Channel_Info_Ex_t[]> pEncChannelnfo(new
-                                                                Enc_Channel_Info_Ex_t[pGetChannelInfo->nEncChannelChildCount]);
+                Enc_Channel_Info_Ex_t[pGetChannelInfo->nEncChannelChildCount]);
         if (pGetChannelInfo->nEncChannelChildCount > 0) {
             pGetChannelInfo->pEncChannelnfo = pEncChannelnfo.get();
             memset(pGetChannelInfo->pEncChannelnfo, 0, sizeof(Enc_Channel_Info_Ex_t)*pGetChannelInfo->nEncChannelChildCount);

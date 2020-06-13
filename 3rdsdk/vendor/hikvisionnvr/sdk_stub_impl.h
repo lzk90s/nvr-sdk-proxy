@@ -28,11 +28,10 @@ public:
 
     int32_t StopRealStream(intptr_t &jobId) override;
 
-    int32_t QueryRecord(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime,
-                        std::vector<RecordInfo> &records) override;
+    int32_t QueryRecord(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime, std::vector<RecordInfo> &records) override;
 
-    int32_t DownloadRecordByTime(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime,
-                                 OnDownloadData onData, intptr_t &jobId) override;
+    int32_t DownloadRecordByTime(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime, OnDownloadData onData,
+                                 intptr_t &jobId) override;
 
     int32_t StopDownloadRecord(intptr_t &jobId) override;
 
@@ -44,6 +43,10 @@ public:
 
     int32_t SetFtp(const std::string &devId, const FtpInfo &ftpInfo) override;
 
+public:
+    /**-------------------------------- callback --------------------------------**/
+    bool AlarmMsgCallback(int64_t cmd, char *buffer, int64_t bufferLen, intptr_t userData);
+
 private:
     std::string  getChannelName(int channelIdx);
 
@@ -52,7 +55,6 @@ private:
     intptr_t handle_;
     int32_t channelNum_;
     int32_t startChan_;    //模拟通道开始号
-    std::string ip_;
 };
 
 }

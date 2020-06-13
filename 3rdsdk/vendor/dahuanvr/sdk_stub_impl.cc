@@ -19,6 +19,12 @@ using json = nlohmann::json;
 static Logger logger("dahua_nvr");
 const static int TIMEOUT = 30000;
 
+#define SUFFIX(msg) std::string("[{}] ").append(msg)
+#define STUB_LLOG_DEBUG(fmt, ...) LLOG_DEBUG(logger, SUFFIX(fmt), (this)->ip_, ##__VA_ARGS__)
+#define STUB_LLOG_INFO(fmt, ...) LLOG_INFO(logger, SUFFIX(fmt), (this)->ip_, ##__VA_ARGS__)
+#define STUB_LLOG_WARN(fmt, ...) LLOG_WARN(logger, SUFFIX(fmt), this->ip_, ##__VA_ARGS__)
+#define STUB_LLOG_ERROR(fmt, ...) LLOG_ERROR(logger, SUFFIX(fmt), this->ip_, ##__VA_ARGS__)
+
 const inline DWORD lastError() {
     return CLIENT_GetLastError() & 0x7fffffff;
 }
@@ -28,7 +34,7 @@ do {                                                                            
     BOOL __result = FALSE;                                                              \
     if ((__result= (method_call)) != TRUE) {                                            \
         DWORD err = lastError();                                                        \
-        LLOG_ERROR(logger,"Call sdk error, result [{}] - {}", err, msg); return err;    \
+        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", err, msg); return err;    \
     }                                                                                   \
 } while (0)
 
@@ -37,7 +43,7 @@ do {                                                                            
     BOOL __result = FALSE;                                                              \
     if ((__result= (method_call)) != TRUE) {                                            \
         DWORD err = lastError();                                                        \
-        LLOG_ERROR(logger,"Call sdk error, result [{}] - {}", err, msg); return err;    \
+        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", err, msg); return err;    \
         (defer)();                                                                      \
     }                                                                                   \
 } while (0)
@@ -144,27 +150,28 @@ SdkStubImpl::~SdkStubImpl() {
 }
 
 int32_t SdkStubImpl::Login(const std::string &ip, const std::string &user, const std::string &password) {
+    ip_ = ip;
+
     int ret = 0;
     NET_DEVICEINFO_Ex devInfo = { 0 };
     handle_ = CLIENT_LoginEx2(ip.c_str(), GetPort(), user.c_str(), password.c_str(), EM_LOGIN_SPEC_CAP_TCP, NULL, &devInfo,
                               &ret);
     if (0 == handle_) {
-        LLOG_ERROR(logger, "Failed to login {}, ret {}", ip, ret);
+        STUB_LLOG_ERROR("Failed to login {}, ret {}", ip, ret);
         return ret;
     }
 
-    LLOG_INFO(logger, "Succeed to login {}, handle {}", ip, handle_);
-    LLOG_INFO(logger, "SerialNumber={}, DVRType={}, ChannelNum={}", devInfo.sSerialNumber, devInfo.nDVRType,
-              devInfo.nChanNum);
+    STUB_LLOG_INFO("Succeed to login {}, handle {}", ip, handle_);
+    STUB_LLOG_INFO("SerialNumber={}, DVRType={}, ChannelNum={}", devInfo.sSerialNumber, devInfo.nDVRType,
+                   devInfo.nChanNum);
 
     channelNum_ = devInfo.nChanNum;
-    ip_ = ip;
 
     return 0;
 }
 
 int32_t SdkStubImpl::Logout() {
-    LLOG_INFO(logger, "Logout {}", handle_);
+    STUB_LLOG_INFO("Logout {}", handle_);
     CLIENT_Logout(handle_);
     return 0;
 }
@@ -174,7 +181,7 @@ int32_t SdkStubImpl::QueryDevice(std::vector<Device> &devices) {
         return 0;
     }
 
-    LLOG_INFO(logger, "Start query device");
+    STUB_LLOG_INFO("Start query device");
 
     std::unique_ptr<DH_IN_MATRIX_GET_CAMERAS> pInParam(new DH_IN_MATRIX_GET_CAMERAS());
     pInParam->dwSize = sizeof(DH_IN_MATRIX_GET_CAMERAS);
@@ -227,7 +234,7 @@ int32_t SdkStubImpl::QueryDevice(std::vector<Device> &devices) {
             dev.id = std::to_string(pOutParam->pstuCameras[i].nUniqueChannel);
             dev.name = pChlInfo->szChannelName;
             dev.ip = pOutParam->pstuCameras[i].stuRemoteDevice.szIp;
-            LLOG_INFO(logger, "Found channel, id={}, name={}, ip={}", dev.id, dev.name, dev.ip);
+            STUB_LLOG_INFO("Found channel, id={}, name={}, ip={}", dev.id, dev.name, dev.ip);
 
             devices.push_back(dev);
         }
@@ -237,13 +244,13 @@ int32_t SdkStubImpl::QueryDevice(std::vector<Device> &devices) {
             dev.id = std::to_string(i);
             dev.name = "Channel_" + dev.id;
             dev.ip = ip_;
-            LLOG_INFO(logger, "Found channel, id={}, name={}, ip={}", dev.id, dev.name, dev.ip);
+            STUB_LLOG_INFO("Found channel, id={}, name={}, ip={}", dev.id, dev.name, dev.ip);
 
             devices.push_back(dev);
         }
     }
 
-    LLOG_INFO(logger, "Succeed to query device, num {}", devices.size());
+    STUB_LLOG_INFO("Succeed to query device, num {}", devices.size());
 
     return 0;
 }
@@ -274,7 +281,7 @@ int32_t SdkStubImpl::StartRealStream(const std::string &devId, OnRealPlayData on
                                             nullptr, (LDWORD)context.get());
     if (playHandle < 0) {
         int ret = lastError();
-        LLOG_ERROR(logger, "NET_DVR_RealPlay_V40 error, ret = {}", ret);
+        STUB_LLOG_ERROR("NET_DVR_RealPlay_V40 error, ret = {}", ret);
         return ret;
     }
 
@@ -320,16 +327,15 @@ int32_t SdkStubImpl::QueryRecord(const std::string &devId, const TimePoint &star
         records.push_back(r);
     }
 
-    LLOG_INFO(logger, "Succeed to query record, record count {}", recordCount);
+    STUB_LLOG_INFO("Succeed to query record, record count {}", recordCount);
 
     return 0;
 }
 
 //playback closure
-typedef struct tagPlaybackInfo {
+typedef struct tagPlaybackInfo : public CallbackClosure {
     intptr_t downloadId;
     SdkStub::OnDownloadData fn;
-    void *thisClass;
 
     tagPlaybackInfo() {
         downloadId = -1;
@@ -340,18 +346,24 @@ typedef struct tagPlaybackInfo {
 
 static void timeDownLoadPos(LLONG lPlayHandle, DWORD dwTotalSize, DWORD dwDownLoadSize, int index,
                             NET_RECORDFILE_INFO recordfileinfo, LDWORD dwUser) {
-    PlaybackContext *context = (PlaybackContext *)dwUser;
+    SdkStubImpl *thisClass = (SdkStubImpl *)((CallbackClosure *)dwUser)->thisClass;
+    thisClass->TimeDownLoadPosCallback(lPlayHandle, dwTotalSize, dwDownLoadSize, index, (void *)&recordfileinfo, dwUser);
+}
+
+void SdkStubImpl::TimeDownLoadPosCallback(intptr_t handle, int64_t totalSize, int64_t downLoadSize, int32_t index, void *recordfileinfo,
+        uintptr_t userData) {
+    PlaybackContext *context = (PlaybackContext *)userData;
     if (nullptr == context) {
         return;
     }
 
-    if (((int32_t)dwDownLoadSize) <= 0) {
-        LLOG_INFO(logger, "Record download 100%, downloadId {}", lPlayHandle);
-        context->fn(lPlayHandle, nullptr, -1);
+    if (((int32_t)downLoadSize) <= 0) {
+        STUB_LLOG_INFO("Record download 100%, downloadId {}", handle);
+        context->fn(handle, nullptr, -1);
     }
 }
 
-static  int downloadDataCallBack(LLONG lRealHandle, DWORD dwDataType, BYTE *pBuffer, DWORD dwBufSize, LDWORD dwUser) {
+static int downloadDataCallBack(LLONG lRealHandle, DWORD dwDataType, BYTE *pBuffer, DWORD dwBufSize, LDWORD dwUser) {
     PlaybackContext *context = (PlaybackContext *)dwUser;
     if (nullptr == context) {
         return 0;
@@ -367,9 +379,8 @@ static  int downloadDataCallBack(LLONG lRealHandle, DWORD dwDataType, BYTE *pBuf
     return 0;
 }
 
-
 int32_t SdkStubImpl::DownloadRecordByTime(const std::string &devId, const TimePoint &startTime,
-                                          const TimePoint &endTime, OnDownloadData onData, intptr_t &jobId) {
+        const TimePoint &endTime, OnDownloadData onData, intptr_t &jobId) {
     //new context
     std::unique_ptr<PlaybackContext> context(new PlaybackContext());
     context->fn = onData;
@@ -380,17 +391,17 @@ int32_t SdkStubImpl::DownloadRecordByTime(const std::string &devId, const TimePo
     fromTimePoint(startTime, tmStart);
     fromTimePoint(endTime, tmEnd);
     context->downloadId = CLIENT_DownloadByTimeEx(handle_, atoi(devId.c_str()), 0,
-                                                  &tmStart, &tmEnd, nullptr,
-                                                  timeDownLoadPos, (LDWORD)context.get(),
-                                                  downloadDataCallBack, (LDWORD)context.get());
+                          &tmStart, &tmEnd, nullptr,
+                          timeDownLoadPos, (LDWORD)context.get(),
+                          downloadDataCallBack, (LDWORD)context.get());
     if (0 == context->downloadId) {
         DWORD err = lastError();
-        LLOG_ERROR(logger, "CLIENT_DownloadByTimeEx error {}", err);
+        STUB_LLOG_ERROR("CLIENT_DownloadByTimeEx error {}", err);
         return err;
     }
 
-    LLOG_INFO(logger, "Downloading file for dev {} between {} and {}, downloadId {}", devId, startTime.ToString(),
-              endTime.ToString(), context->downloadId);
+    STUB_LLOG_INFO("Downloading file for dev {} between {} and {}, downloadId {}", devId, startTime.ToString(),
+                   endTime.ToString(), context->downloadId);
 
     jobId = (intptr_t)context.get();
     context.release();  // 释放控制权
@@ -401,7 +412,7 @@ int32_t SdkStubImpl::DownloadRecordByTime(const std::string &devId, const TimePo
 int32_t SdkStubImpl::StopDownloadRecord(intptr_t &jobId) {
     std::unique_ptr<PlaybackContext> context((PlaybackContext *)jobId); // auto delete
     if (nullptr != context) {
-        LLOG_INFO(logger, "Stop download file, downloadId {}", context->downloadId);
+        STUB_LLOG_INFO("Stop download file, downloadId {}", context->downloadId);
         CHECK(CLIENT_StopDownload(context->downloadId), "CLIENT_StopDownload");
         jobId = 0;
     }
@@ -409,15 +420,17 @@ int32_t SdkStubImpl::StopDownloadRecord(intptr_t &jobId) {
 }
 
 //playback closure
-typedef struct tagEventAnalyzeContext {
+typedef struct tagEventAnalyzeContext : public CallbackClosure {
     intptr_t analyzeId;
     intptr_t videoStatHandle;
+    intptr_t startServiceHandle;
     SdkStub::OnAnalyzeData fn;
-    void *thisClass;
     void *userData;
 
     tagEventAnalyzeContext() {
         analyzeId = -1;
+        videoStatHandle = -1;
+        startServiceHandle = -1;
         fn = nullptr;
         thisClass = nullptr;
     }
@@ -545,23 +558,33 @@ static int32_t mappingConvert(const TypeMapping &m, const std::string &key)  {
 
 static BOOL analyzerDataCallBack(LLONG lAnalyzerHandle, DWORD dwAlarmType, void *pAlarmInfo, BYTE *pBuffer,
                                  DWORD dwBufSize, LDWORD dwUser, int nSequence, void *reserved) {
-    EventAnalyzeContext *context = (EventAnalyzeContext *)dwUser;
-    if (nullptr == context || nullptr == context->fn || nullptr == pAlarmInfo || nullptr == pBuffer) {
-        return FALSE;
+    SdkStubImpl *thisClass = (SdkStubImpl *)((CallbackClosure *)dwUser)->thisClass;
+    return thisClass->AnalyzerDataCallBack(lAnalyzerHandle, dwAlarmType, pAlarmInfo, pBuffer, dwBufSize, dwUser);
+}
+
+bool SdkStubImpl::AnalyzerDataCallBack(intptr_t handle, int64_t alarmType, void *alarmInfo, uint8_t *buffer, int64_t bufSize, intptr_t userData) {
+    EventAnalyzeContext *context = (EventAnalyzeContext *)userData;
+    if (nullptr == context || nullptr == context->fn || nullptr == alarmInfo || nullptr == buffer) {
+        return false;
     }
 
-    LLOG_INFO(logger, "[analyzerDataCallBack] Received alarm message, type {}", dwAlarmType);
+    //排除移动侦测告警
+    if (alarmType == EVENT_ALARM_MOTIONDETECT) {
+        return true;
+    }
 
-    switch (dwAlarmType) {
+    STUB_LLOG_INFO("[analyzerDataCallBack] Received alarm message, type {}", alarmType);
+
+    switch (alarmType) {
     //违停
     case EVENT_IVS_TRAFFIC_PARKING: {
-        DEV_EVENT_TRAFFIC_PARKING_INFO &data = *((DEV_EVENT_TRAFFIC_PARKING_INFO *)pAlarmInfo);
+        DEV_EVENT_TRAFFIC_PARKING_INFO &data = *((DEV_EVENT_TRAFFIC_PARKING_INFO *)alarmInfo);
 
         DH_RECT &rectBoundingBox = data.stuVehicle.BoundingBox;
         long nWidth = data.stuResolution.snWidth;
         long nHeight = data.stuResolution.snHight;
         if ((nWidth <= 0) || (nHeight <= 0)) {
-            return FALSE;
+            return false;
         }
 
         IllegalParkingEvent info;
@@ -586,13 +609,13 @@ static BOOL analyzerDataCallBack(LLONG lAnalyzerHandle, DWORD dwAlarmType, void 
             break;
         }
 
-        context->fn(lAnalyzerHandle, AlarmEventType::ILLEGAL_PARKING, ((json)info).dump(), pBuffer, dwBufSize,
+        context->fn(handle, AlarmEventType::ILLEGAL_PARKING, ((json)info).dump(), buffer, bufSize,
                     context->userData);
         break;
     }
     //人数量统计
     case EVENT_IVS_NUMBERSTAT: {
-        DEV_EVENT_NUMBERSTAT_INFO &data = *((DEV_EVENT_NUMBERSTAT_INFO *)pAlarmInfo);
+        DEV_EVENT_NUMBERSTAT_INFO &data = *((DEV_EVENT_NUMBERSTAT_INFO *)alarmInfo);
 
         PersonNumEvent info;
         info.ruleName = data.szName;
@@ -601,23 +624,22 @@ static BOOL analyzerDataCallBack(LLONG lAnalyzerHandle, DWORD dwAlarmType, void 
     }
     //
     case EVENT_IVS_MAN_NUM_DETECTION: {
-        DEV_EVENT_MANNUM_DETECTION_INFO &data = *((DEV_EVENT_MANNUM_DETECTION_INFO *)pAlarmInfo);
-        LLOG_INFO(logger, "{} {}", data.szName, data.nManListCount);
+        DEV_EVENT_MANNUM_DETECTION_INFO &data = *((DEV_EVENT_MANNUM_DETECTION_INFO *)alarmInfo);
         break;
     }
     case EVENT_IVS_STAYDETECTION: {
-        DEV_EVENT_STAY_INFO &data = *((DEV_EVENT_STAY_INFO *)pAlarmInfo);
+        DEV_EVENT_STAY_INFO &data = *((DEV_EVENT_STAY_INFO *)alarmInfo);
         break;
     }
     //交通抓拍
     case EVENT_IVS_TRAFFICJUNCTION: {
-        DEV_EVENT_TRAFFICJUNCTION_INFO &data = *((DEV_EVENT_TRAFFICJUNCTION_INFO *)pAlarmInfo);
+        DEV_EVENT_TRAFFICJUNCTION_INFO &data = *((DEV_EVENT_TRAFFICJUNCTION_INFO *)alarmInfo);
 
         DH_RECT &rectBoundingBox = data.stuVehicle.BoundingBox;
         long nWidth = data.stuResolution.snWidth;
         long nHeight = data.stuResolution.snHight;
         if ((nWidth <= 0) || (nHeight <= 0)) {
-            return FALSE;
+            return false;
         }
 
         VehicleCaptureEvent info;
@@ -633,19 +655,19 @@ static BOOL analyzerDataCallBack(LLONG lAnalyzerHandle, DWORD dwAlarmType, void 
             break;
         }
 
-        context->fn(lAnalyzerHandle, AlarmEventType::VEHICLE_CAPTURE, ((json)info).dump(), pBuffer, dwBufSize,
+        context->fn(handle, AlarmEventType::VEHICLE_CAPTURE, ((json)info).dump(), buffer, bufSize,
                     context->userData);
 
         break;
     }
     case EVENT_IVS_TRAFFICGATE: {
-        DEV_EVENT_TRAFFICGATE_INFO &data = *((DEV_EVENT_TRAFFICGATE_INFO *)pAlarmInfo);
+        DEV_EVENT_TRAFFICGATE_INFO &data = *((DEV_EVENT_TRAFFICGATE_INFO *)alarmInfo);
 
         DH_RECT &rectBoundingBox = data.stuVehicle.BoundingBox;
         long nWidth = data.stuResolution.snWidth;
         long nHeight = data.stuResolution.snHight;
         if ((nWidth <= 0) || (nHeight <= 0)) {
-            return FALSE;
+            return false;
         }
 
 //         VehicleCaptureEvent info;
@@ -668,7 +690,7 @@ static BOOL analyzerDataCallBack(LLONG lAnalyzerHandle, DWORD dwAlarmType, void 
         break;
     }
     case EVENT_IVS_ACCESS_CTL: {
-        DEV_EVENT_ACCESS_CTL_INFO &data = *((DEV_EVENT_ACCESS_CTL_INFO *)pAlarmInfo);
+        DEV_EVENT_ACCESS_CTL_INFO &data = *((DEV_EVENT_ACCESS_CTL_INFO *)alarmInfo);
         AcsEvent info;
         info.dateTime = netTimeToString(data.UTC);
         info.type = (int32_t)data.emEventType;
@@ -680,16 +702,23 @@ static BOOL analyzerDataCallBack(LLONG lAnalyzerHandle, DWORD dwAlarmType, void 
     }
     }
 
-    return TRUE;
+    return true;
 }
 
 static void videoStatSumCallBack(LLONG lAttachHandle, NET_VIDEOSTAT_SUMMARY *pBuf, DWORD dwBufLen, LDWORD dwUser) {
-    EventAnalyzeContext *context = (EventAnalyzeContext *)dwUser;
-    if (nullptr == context || nullptr == context->fn || nullptr == pBuf) {
+    SdkStubImpl *thisClass = (SdkStubImpl *)((CallbackClosure *)dwUser)->thisClass;
+    thisClass->VideoStatSumCallBack(lAttachHandle, (void *)pBuf, dwBufLen, dwUser);
+}
+
+void SdkStubImpl::VideoStatSumCallBack(uintptr_t handle, void *buffer, uint64_t bufSize, uintptr_t userData) {
+    EventAnalyzeContext *context = (EventAnalyzeContext *)userData;
+    if (nullptr == context || nullptr == context->fn || nullptr == buffer) {
         return;
     }
 
-    LLOG_INFO(logger, "[videoStatSumCallBack] Received video stat summary event");
+    NET_VIDEOSTAT_SUMMARY *pBuf = (NET_VIDEOSTAT_SUMMARY *)buffer;
+
+    STUB_LLOG_INFO("[videoStatSumCallBack] Received video stat summary event");
 
     VisitorsFlowRateEvent info;
     info.dateTime = netTimeToString(pBuf->stuTime);
@@ -704,69 +733,88 @@ static void videoStatSumCallBack(LLONG lAttachHandle, NET_VIDEOSTAT_SUMMARY *pBu
     info.outCount.today = pBuf->stuExitedSubtotal.nToday;
     info.outCount.osd = pBuf->stuExitedSubtotal.nOSD;
 
-    context->fn(lAttachHandle, AlarmEventType::VISITORS_FLOWRATE, ((json)info).dump(), nullptr, 0, context->userData);
+    context->fn(handle, AlarmEventType::VISITORS_FLOWRATE, ((json)info).dump(), nullptr, 0, context->userData);
 }
+
 
 BOOL messageCallBack(LONG lCommand, LLONG lLoginID, char *pBuf, DWORD dwBufLen, char *pchDVRIP, LONG nDVRPort,
                      BOOL bAlarmAckFlag, LONG nEventID, LDWORD dwUser) {
-    EventAnalyzeContext *context = (EventAnalyzeContext *)dwUser;
-    if (nullptr == context || nullptr == context->fn || nullptr == pBuf) {
+    SdkStubImpl *thisClass = (SdkStubImpl *)((CallbackClosure *)dwUser)->thisClass;
+    return thisClass->MessageCallBack(lCommand, pBuf, dwBufLen, nEventID, dwUser);
+}
+
+bool SdkStubImpl::MessageCallBack(uint64_t cmd, char *buffer, uint64_t bufSize,  uint64_t eventId, uintptr_t userData) {
+    EventAnalyzeContext *context = (EventAnalyzeContext *)userData;
+    if (nullptr == context || nullptr == context->fn || nullptr == buffer) {
         return FALSE;
     }
 
-    LLOG_INFO(logger, "[messageCallBack] Received message {}", lCommand);
+    STUB_LLOG_INFO("[messageCallBack] Received message {}", cmd);
 
-    switch (lCommand) {
-    // 门禁刷卡事件
-    case DH_ALARM_ACCESS_CTL_EVENT: {
-        ALARM_ACCESS_CTL_EVENT_INFO *pInfo = (ALARM_ACCESS_CTL_EVENT_INFO *)pBuf;
-        break;
-    }
-    case DH_ALARM_ACCESS_CTL_BREAK_IN: {
-        ALARM_ACCESS_CTL_BREAK_IN_INFO *pInfo = (ALARM_ACCESS_CTL_BREAK_IN_INFO *)pBuf;
-        break;
-    }
-    case DH_ALARM_ACCESS_CTL_DURESS: {
-        ALARM_ACCESS_CTL_DURESS_INFO *pInfo = (ALARM_ACCESS_CTL_DURESS_INFO *)pBuf;
-        break;
-    }
-    case DH_ALARM_ACCESS_CTL_NOT_CLOSE: {
-        ALARM_ACCESS_CTL_NOT_CLOSE_INFO *pInfo = (ALARM_ACCESS_CTL_NOT_CLOSE_INFO *)pBuf;
-        break;
-    }
-    case DH_ALARM_ACCESS_CTL_REPEAT_ENTER: {
-        ALARM_ACCESS_CTL_REPEAT_ENTER_INFO *pInfo = (ALARM_ACCESS_CTL_REPEAT_ENTER_INFO *)pBuf;
-        break;
-    }
-    case DH_ALARM_ACCESS_CTL_STATUS: {
-        ALARM_ACCESS_CTL_STATUS_INFO *pInfo = (ALARM_ACCESS_CTL_STATUS_INFO *)pBuf;
-        break;
-    }
-    case DH_ALARM_CHASSISINTRUDED: {
-        ALARM_CHASSISINTRUDED_INFO *pInfo = (ALARM_CHASSISINTRUDED_INFO *)pBuf;
-        break;
-    }
-    case DH_ALARM_OPENDOORGROUP: {
-        ALARM_OPEN_DOOR_GROUP_INFO *pInfo = (ALARM_OPEN_DOOR_GROUP_INFO *)pBuf;
-        break;
-    }
-    case DH_ALARM_FINGER_PRINT: {
-        ALARM_CAPTURE_FINGER_PRINT_INFO *pInfo = (ALARM_CAPTURE_FINGER_PRINT_INFO *)pBuf;
-        break;
-    }
-    case DH_ALARM_ALARM_EX2: {
-        ALARM_ALARM_INFO_EX2 *pInfo = (ALARM_ALARM_INFO_EX2 *)pBuf;
-        break;
-    }
-    case DH_ALARM_TRAFFICSTROBESTATE: {
-        ALARM_TRAFFICSTROBESTATE_INFO *pInfo = (ALARM_TRAFFICSTROBESTATE_INFO *)pBuf;
+    switch (cmd) {
+//     // 门禁刷卡事件
+//     case DH_ALARM_ACCESS_CTL_EVENT: {
+//         ALARM_ACCESS_CTL_EVENT_INFO *pInfo = (ALARM_ACCESS_CTL_EVENT_INFO *)buffer;
+//         break;
+//     }
+//     case DH_ALARM_ACCESS_CTL_BREAK_IN: {
+//         ALARM_ACCESS_CTL_BREAK_IN_INFO *pInfo = (ALARM_ACCESS_CTL_BREAK_IN_INFO *)buffer;
+//         break;
+//     }
+//     case DH_ALARM_ACCESS_CTL_DURESS: {
+//         ALARM_ACCESS_CTL_DURESS_INFO *pInfo = (ALARM_ACCESS_CTL_DURESS_INFO *)buffer;
+//         break;
+//     }
+//     case DH_ALARM_ACCESS_CTL_NOT_CLOSE: {
+//         ALARM_ACCESS_CTL_NOT_CLOSE_INFO *pInfo = (ALARM_ACCESS_CTL_NOT_CLOSE_INFO *)buffer;
+//         break;
+//     }
+//     case DH_ALARM_ACCESS_CTL_REPEAT_ENTER: {
+//         ALARM_ACCESS_CTL_REPEAT_ENTER_INFO *pInfo = (ALARM_ACCESS_CTL_REPEAT_ENTER_INFO *)buffer;
+//         break;
+//     }
+//     case DH_ALARM_ACCESS_CTL_STATUS: {
+//         ALARM_ACCESS_CTL_STATUS_INFO *pInfo = (ALARM_ACCESS_CTL_STATUS_INFO *)buffer;
+//         break;
+//     }
+//     case DH_ALARM_CHASSISINTRUDED: {
+//         ALARM_CHASSISINTRUDED_INFO *pInfo = (ALARM_CHASSISINTRUDED_INFO *)buffer;
+//         break;
+//     }
+//     case DH_ALARM_OPENDOORGROUP: {
+//         ALARM_OPEN_DOOR_GROUP_INFO *pInfo = (ALARM_OPEN_DOOR_GROUP_INFO *)buffer;
+//         break;
+//     }
+//     case DH_ALARM_FINGER_PRINT: {
+//         ALARM_CAPTURE_FINGER_PRINT_INFO *pInfo = (ALARM_CAPTURE_FINGER_PRINT_INFO *)buffer;
+//         break;
+//     }
+//     case DH_ALARM_ALARM_EX2: {
+//         ALARM_ALARM_INFO_EX2 *pInfo = (ALARM_ALARM_INFO_EX2 *)buffer;
+//         break;
+//     }
+//     case DH_ALARM_TRAFFICSTROBESTATE: {
+//         ALARM_TRAFFICSTROBESTATE_INFO *pInfo = (ALARM_TRAFFICSTROBESTATE_INFO *)buffer;
+//         break;
+//     }
+    case DH_ALARM_RIOTERDETECTION: {
+        ALARM_RIOTERDETECTION_INFO *pInfo = (ALARM_RIOTERDETECTION_INFO *)buffer;
+
+        GatherEvent info;
+        info.action = pInfo->nAction;
+
+        //抓拍一张图片
+        uint32_t imgBufSize = 5 * 1024 * 1024;
+        std::unique_ptr<uint8_t[]> imgBuf(new uint8_t[imgBufSize]);
+        this->SnapPicture(std::to_string(pInfo->nChannelID), imgBuf.get(), imgBufSize);
+
+        context->fn(cmd, AlarmEventType::GATHER, ((json)info).dump(), imgBuf.get(), imgBufSize, context->userData);
+
         break;
     }
     default:
         return TRUE;
     }
-
-    LLOG_INFO(logger, "Received message {}", lCommand);
 
     return TRUE;
 }
@@ -779,10 +827,10 @@ int32_t SdkStubImpl::StartEventAnalyze(const std::string &devId, OnAnalyzeData o
     context->thisClass = this;
     context->userData = userData;
     context->analyzeId = CLIENT_RealLoadPictureEx(handle_, atoi(devId.c_str()), EVENT_IVS_ALL, true, analyzerDataCallBack,
-                                                  (LDWORD)context.get(), nullptr);
+                         (LDWORD)context.get(), nullptr);
     if (context->analyzeId < 0) {
         int ret = lastError();
-        LLOG_ERROR(logger, "CLIENT_RealLoadPictureEx error, ret = {}", ret);
+        STUB_LLOG_ERROR("CLIENT_RealLoadPictureEx error, ret = {}", ret);
         return ret;
     }
 
@@ -793,14 +841,14 @@ int32_t SdkStubImpl::StartEventAnalyze(const std::string &devId, OnAnalyzeData o
     context->videoStatHandle = CLIENT_AttachVideoStatSummary(handle_, &videoStatIn, &videoStatOut, TIMEOUT);
     if (context->videoStatHandle < 0) {
         int ret = lastError();
-        LLOG_ERROR(logger, "CLIENT_AttachVideoStatSummary error, ret = {}", ret);
+        STUB_LLOG_ERROR("CLIENT_AttachVideoStatSummary error, ret = {}", ret);
         return ret;
     }
 
     CLIENT_SetDVRMessCallBackEx1(messageCallBack, (LDWORD)context.get());
     CHECK(CLIENT_StartListenEx(handle_), "CLIENT_StartListenEx");
 
-    LLOG_INFO(logger, "Start event analyze succeed, dev {}, jobId {}, ip {}", devId, context->analyzeId, this->ip_);
+    STUB_LLOG_INFO("Start event analyze succeed, dev {}, jobId {}", devId, context->analyzeId);
 
     jobId = (intptr_t)context.get();
     context.release();  // 释放控制权
@@ -810,18 +858,43 @@ int32_t SdkStubImpl::StartEventAnalyze(const std::string &devId, OnAnalyzeData o
 int32_t SdkStubImpl::StopEventAnalyze(intptr_t &jobId) {
     std::unique_ptr<EventAnalyzeContext> context((EventAnalyzeContext *)jobId); // auto delete
     if (context->analyzeId >= 0) {
-        LLOG_INFO(logger, "Stop event analyze, jobId {}", jobId);
+        STUB_LLOG_INFO("Stop event analyze, jobId {}", jobId);
         CHECK(CLIENT_StopLoadPic(context->analyzeId), "CLIENT_StopLoadPic");
     }
     if (context->videoStatHandle > 0) {
-        LLOG_INFO(logger, "Stop video stat summary, jobId {}", jobId);
+        STUB_LLOG_INFO("Stop video stat summary, jobId {}", jobId);
         CHECK(CLIENT_DetachVideoStatSummary(context->videoStatHandle), "CLIENT_DetachVideoStatSummary");
     }
-    LLOG_INFO(logger, "Stop listen");
+    STUB_LLOG_INFO("Stop listen");
     CHECK(CLIENT_StopListen(handle_), "CLIENT_StopListen");
     return 0;
 }
 
+int32_t SdkStubImpl::SnapPicture(const std::string &devId, uint8_t *imgBuf, uint32_t &imgBufSize) {
+    NET_IN_SNAP_PIC_TO_FILE_PARAM inParam = {0};
+    inParam.dwSize = sizeof(NET_IN_SNAP_PIC_TO_FILE_PARAM);
+    inParam.stuParam.Channel = atoi(devId.c_str());
+    inParam.stuParam.Channel = atoi(devId.c_str());
+    inParam.stuParam.Quality = 6;
+    inParam.stuParam.ImageSize = 2;
+    inParam.stuParam.mode = 0;
+
+    NET_OUT_SNAP_PIC_TO_FILE_PARAM outParam = {0};
+    outParam.dwSize = sizeof(NET_OUT_SNAP_PIC_TO_FILE_PARAM);
+    outParam.szPicBuf = (char *)imgBuf;
+    outParam.dwPicBufLen = imgBufSize;
+
+    //clear
+    imgBufSize = 0;
+
+    CHECK(CLIENT_SnapPictureToFile(handle_, &inParam, &outParam, TIMEOUT), "CLIENT_SnapPictureToFile");
+
+    imgBufSize = outParam.dwPicBufRetLen;
+
+    STUB_LLOG_INFO("Snap picture succeed for device {}", devId);
+
+    return 0;
+}
 
 int32_t SdkStubImpl::GetFtp(const std::string &devId, FtpInfo &ftpInfo) {
     DHDEV_FTP_PROTO_CFG ftpCfg = { 0 };
@@ -851,7 +924,7 @@ int32_t SdkStubImpl::SetFtp(const std::string &devId, const FtpInfo &ftpInfo) {
 }
 
 int32_t SdkStubImpl::QueryVisitorsFlowRateHistory(const std::string &devId, int32_t granularity,
-                                                  const TimePoint &startTime, const TimePoint &endTime, std::vector<VisitorsFlowRateHistory> &histories) {
+        const TimePoint &startTime, const TimePoint &endTime, std::vector<VisitorsFlowRateHistory> &histories) {
 
     NET_IN_FINDNUMBERSTAT inParam = { sizeof(NET_IN_FINDNUMBERSTAT) };
     inParam.nChannelID = atoi(devId.c_str());
@@ -862,13 +935,13 @@ int32_t SdkStubImpl::QueryVisitorsFlowRateHistory(const std::string &devId, int3
     fromTimePoint(endTime, inParam.stEndTime);
     NET_OUT_FINDNUMBERSTAT outParam{ sizeof(NET_OUT_FINDNUMBERSTAT) };
 
-    LLOG_INFO(logger, "Start to query visitors flow rate history, devId {}, granularity {}, startTime {}, endTime {}",
-              devId, granularity, startTime.ToString(), endTime.ToString());
+    STUB_LLOG_INFO("Start to query visitors flow rate history, devId {}, granularity {}, startTime {}, endTime {}",
+                   devId, granularity, startTime.ToString(), endTime.ToString());
 
     LLONG findHand = CLIENT_StartFindNumberStat(handle_, &inParam, &outParam);
     if (findHand == 0) {
         int ret = lastError();
-        LLOG_ERROR(logger, "CLIENT_StartFindNumberStat failed! ret {}", ret);
+        STUB_LLOG_ERROR("CLIENT_StartFindNumberStat failed! ret {}", ret);
         return ret;
     }
 
