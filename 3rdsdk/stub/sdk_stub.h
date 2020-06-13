@@ -22,8 +22,8 @@ class SdkStub {
 public:
     using OnDownloadData = std::function<void(intptr_t id, const uint8_t *buffer, int32_t bufferLen)>;
     using OnRealPlayData = std::function<void(intptr_t id, const uint8_t *buffer, int32_t bufferLen)>;
-    using OnAnalyzeData = std::function<void(intptr_t id, int type, const std::string &jsonData, const uint8_t *imgBuffer,
-                          int32_t imgBufferLen, void *userData)>;
+    using OnAnalyzeData = std::function<void(intptr_t id, int type, const std::string &jsonData,
+                          const uint8_t *imgBuffer, int32_t imgBufferLen, void *userData)>;
 
 public:
     SdkStub(const std::string &vendor, const std::string &description, int port)

@@ -264,8 +264,7 @@ int32_t SdkStubImpl::StopRealStream(intptr_t &jobId) {
     return 0;
 }
 
-int32_t SdkStubImpl::QueryRecord(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime,
-                                 std::vector<RecordInfo> &records) {
+int32_t SdkStubImpl::QueryRecord(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime, std::vector<RecordInfo> &records) {
     NET_DVR_FILECOND_V50 fileCond = { 0 };
     fileCond.struStreamID.dwChannel = atoi(devId.c_str());
     fileCond.dwFileType = 0xff;
@@ -320,16 +319,15 @@ typedef struct tagPlaybackInfo: public CallbackClosure {
     }
 } PlaybackContext;
 
-static void CALLBACK downloadDataCallBack(LONG lPlayHandle, DWORD dwDataType, BYTE *pBuffer, DWORD dwBufSize,
-        void *pUser) {
+static void CALLBACK downloadDataCallBack(LONG lPlayHandle, DWORD dwDataType, BYTE *pBuffer, DWORD dwBufSize, void *pUser) {
     PlaybackContext *context = static_cast<PlaybackContext *>(pUser);
     if (nullptr != context) {
         context->fn(lPlayHandle, pBuffer, dwBufSize);
     }
 }
 
-int32_t SdkStubImpl::DownloadRecordByTime(const std::string &devId, const TimePoint &startTime,
-        const TimePoint &endTime, OnDownloadData onData, intptr_t &jobId) {
+int32_t SdkStubImpl::DownloadRecordByTime(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime, OnDownloadData onData,
+        intptr_t &jobId) {
     //new context
     std::unique_ptr<PlaybackContext> context(new PlaybackContext());
     context->fn = onData;
@@ -470,8 +468,7 @@ bool SdkStubImpl::AlarmMsgCallback(int64_t cmd, char *buffer, int64_t bufferLen,
     return TRUE;
 }
 
-int32_t SdkStubImpl::StartEventAnalyze(const std::string &devId, OnAnalyzeData onData, void *userData,
-                                       intptr_t &jobId) {
+int32_t SdkStubImpl::StartEventAnalyze(const std::string &devId, OnAnalyzeData onData, void *userData, intptr_t &jobId) {
     std::unique_ptr<EventContext> context(new EventContext());
     context->fn = onData;
     context->thisClass = this;

@@ -18,14 +18,14 @@ namespace sdk {
 
 class NetworkException : public std::exception {
 public:
-    const char* what()const throw() override {
+    const char *what()const throw() override {
         return "Network exception";
     }
 };
 
 class LoginException : public std::exception {
 public:
-    const char* what()const throw() override {
+    const char *what()const throw() override {
         return "Login failed";
     }
 };
@@ -159,7 +159,7 @@ private:
         addr.sin_addr.s_addr = inet_addr(ip.c_str());
         addr.sin_port = htons(port);
 
-        if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+        if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
             reachable = false;
 //             if (errno == EINPROGRESS) {
 //                 //timeout? return true
@@ -177,7 +177,7 @@ private:
     MetaDataStore metaStore_;
 };
 
-SdkManager& SDK_MNG() {
+SdkManager &SDK_MNG() {
     return Singleton<SdkManager>::getInstance();
 }
 
