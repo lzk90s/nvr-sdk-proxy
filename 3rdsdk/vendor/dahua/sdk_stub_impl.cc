@@ -24,7 +24,7 @@ static Logger logger("dahua");
 do {                                                                                \
     int __result=0;                                                                 \
     if (( __result= (method_call)) != 0) {                                          \
-        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", __result, msg);      \
+        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", __result, msg);         \
         return __result;                                                            \
     }                                                                               \
 } while (0)
@@ -33,7 +33,7 @@ do {                                                                            
 do {                                                                                \
     int __result=0;                                                                 \
     if (( __result= (method_call)) != 0) {                                          \
-        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", __result, msg);      \
+        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", __result, msg);         \
         (defer)();                                                                  \
         return __result;                                                            \
     }                                                                               \
@@ -43,7 +43,7 @@ do {                                                                            
 do {                                                                                \
     if (((method_call)) != TRUE) {                                                  \
         DWORD __result = PLAY_GetLastError(port);                                   \
-        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", __result, msg);      \
+        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", __result, msg);         \
         return __result;                                                            \
     }                                                                               \
 } while (0)
@@ -52,7 +52,7 @@ do {                                                                            
 do {                                                                                \
     if (((method_call)) != TRUE) {                                                  \
         DWORD __result = PLAY_GetLastError(port);                                   \
-        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", __result, msg);      \
+        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", __result, msg);         \
         (defer)();                                                                  \
         return __result;                                                            \
     }                                                                               \

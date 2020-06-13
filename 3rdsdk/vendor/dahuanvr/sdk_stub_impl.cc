@@ -34,7 +34,7 @@ do {                                                                            
     BOOL __result = FALSE;                                                              \
     if ((__result= (method_call)) != TRUE) {                                            \
         DWORD err = lastError();                                                        \
-        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", err, msg); return err;    \
+        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", err, msg); return err;      \
     }                                                                                   \
 } while (0)
 
@@ -43,7 +43,7 @@ do {                                                                            
     BOOL __result = FALSE;                                                              \
     if ((__result= (method_call)) != TRUE) {                                            \
         DWORD err = lastError();                                                        \
-        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", err, msg); return err;    \
+        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", err, msg); return err;      \
         (defer)();                                                                      \
     }                                                                                   \
 } while (0)
@@ -110,13 +110,15 @@ static std::string getCurrentDateTime(const std::string &format = "%F %T") {
 
 static std::string netTimeToString(const NET_TIME_EX &tm) {
     char t[128] = { 0 };
-    snprintf(t, sizeof(t) - 1, "%04d-%02d-%02d %02d:%02d:%02d", tm.dwYear, tm.dwMonth, tm.dwDay, tm.dwHour, tm.dwMinute, tm.dwSecond);
+    snprintf(t, sizeof(t) - 1, "%04d-%02d-%02d %02d:%02d:%02d", tm.dwYear, tm.dwMonth, tm.dwDay, tm.dwHour, tm.dwMinute,
+             tm.dwSecond);
     return std::string(t);
 }
 
 static std::string netTimeToString(const NET_TIME &tm) {
     char t[128] = { 0 };
-    snprintf(t, sizeof(t) - 1, "%04d-%02d-%02d %02d:%02d:%02d", tm.dwYear, tm.dwMonth, tm.dwDay, tm.dwHour, tm.dwMinute, tm.dwSecond);
+    snprintf(t, sizeof(t) - 1, "%04d-%02d-%02d %02d:%02d:%02d", tm.dwYear, tm.dwMonth, tm.dwDay, tm.dwHour, tm.dwMinute,
+             tm.dwSecond);
     return std::string(t);
 }
 
@@ -152,7 +154,8 @@ int32_t SdkStubImpl::Login(const std::string &ip, const std::string &user, const
 
     int ret = 0;
     NET_DEVICEINFO_Ex devInfo = { 0 };
-    handle_ = CLIENT_LoginEx2(ip.c_str(), GetPort(), user.c_str(), password.c_str(), EM_LOGIN_SPEC_CAP_TCP, NULL, &devInfo, &ret);
+    handle_ = CLIENT_LoginEx2(ip.c_str(), GetPort(), user.c_str(), password.c_str(), EM_LOGIN_SPEC_CAP_TCP, NULL, &devInfo,
+                              &ret);
     if (0 == handle_) {
         STUB_LLOG_ERROR("Failed to login {}, ret {}", ip, ret);
         return ret;
@@ -212,7 +215,8 @@ int32_t SdkStubImpl::QueryDevice(std::vector<Device> &devices) {
             pCameraStateOutBuf->pCameraStateInfo = &cameraStateInfo;
             memset(pCameraStateOutBuf->pCameraStateInfo, 0, sizeof(NET_CAMERA_STATE_INFO));
 
-            CHECK(CLIENT_QueryDevInfo(handle_, NET_QUERY_GET_CAMERA_STATE, pCameraStateInBuf.get(), pCameraStateOutBuf.get(), nullptr, TIMEOUT),
+            CHECK(CLIENT_QueryDevInfo(handle_, NET_QUERY_GET_CAMERA_STATE, pCameraStateInBuf.get(), pCameraStateOutBuf.get(),
+                                      nullptr, TIMEOUT),
                   "Query device info");
             if (EM_CAMERA_STATE_TYPE_CONNECTED != pCameraStateOutBuf->pCameraStateInfo->emConnectionState) {
                 LLOG_WARN(logger, "The channel {} has not connected, ignore it", i);
@@ -222,7 +226,8 @@ int32_t SdkStubImpl::QueryDevice(std::vector<Device> &devices) {
             std::unique_ptr<NET_ENCODE_CHANNELTITLE_INFO> pChlInfo(new NET_ENCODE_CHANNELTITLE_INFO());
             memset(pChlInfo.get(), 0, sizeof(NET_ENCODE_CHANNELTITLE_INFO));
             pChlInfo->dwSize = sizeof(NET_ENCODE_CHANNELTITLE_INFO);
-            CHECK(CLIENT_GetConfig(handle_, NET_EM_CFG_ENCODE_CHANNELTITLE, pOutParam->pstuCameras[i].nUniqueChannel, pChlInfo.get(),
+            CHECK(CLIENT_GetConfig(handle_, NET_EM_CFG_ENCODE_CHANNELTITLE, pOutParam->pstuCameras[i].nUniqueChannel,
+                                   pChlInfo.get(),
                                    sizeof(NET_ENCODE_CHANNELTITLE_INFO)), "CLIENT_GetConfig NET_EM_CFG_ENCODE_CHANNELTITLE");
 
             Device dev;
@@ -260,7 +265,8 @@ typedef struct tagRealPlayInfo : public CallbackClosure {
     }
 } RealPlayContext;
 
-void CALLBACK previewDataCallback(LLONG lRealHandle, DWORD dwDataType, BYTE *pBuffer, DWORD dwBufSize, LONG param, LDWORD dwUser) {
+void CALLBACK previewDataCallback(LLONG lRealHandle, DWORD dwDataType, BYTE *pBuffer, DWORD dwBufSize, LONG param,
+                                  LDWORD dwUser) {
     RealPlayContext *context = (RealPlayContext *)dwUser;
     if (nullptr == context || nullptr == context->fn) {
         return;
@@ -338,13 +344,15 @@ typedef struct tagPlaybackInfo : public CallbackClosure {
     }
 } PlaybackContext;
 
-static void timeDownLoadPos(LLONG lPlayHandle, DWORD dwTotalSize, DWORD dwDownLoadSize, int index, NET_RECORDFILE_INFO recordfileinfo,
+static void timeDownLoadPos(LLONG lPlayHandle, DWORD dwTotalSize, DWORD dwDownLoadSize, int index,
+                            NET_RECORDFILE_INFO recordfileinfo,
                             LDWORD dwUser) {
     SdkStubImpl *thisClass = (SdkStubImpl *)((CallbackClosure *)dwUser)->thisClass;
     thisClass->TimeDownLoadPosCallback(lPlayHandle, dwTotalSize, dwDownLoadSize, index, (void *)&recordfileinfo, dwUser);
 }
 
-void SdkStubImpl::TimeDownLoadPosCallback(intptr_t handle, int64_t totalSize, int64_t downLoadSize, int32_t index, void *recordfileinfo,
+void SdkStubImpl::TimeDownLoadPosCallback(intptr_t handle, int64_t totalSize, int64_t downLoadSize, int32_t index,
+        void *recordfileinfo,
         uintptr_t userData) {
     PlaybackContext *context = (PlaybackContext *)userData;
     if (nullptr == context) {
@@ -394,7 +402,8 @@ int32_t SdkStubImpl::DownloadRecordByTime(const std::string &devId, const TimePo
         return err;
     }
 
-    STUB_LLOG_INFO("Downloading file for dev {} between {} and {}, downloadId {}", devId, startTime.ToString(), endTime.ToString(), context->downloadId);
+    STUB_LLOG_INFO("Downloading file for dev {} between {} and {}, downloadId {}", devId, startTime.ToString(),
+                   endTime.ToString(), context->downloadId);
 
     jobId = (intptr_t)context.get();
     context.release();  // 释放控制权
@@ -555,7 +564,8 @@ static BOOL analyzerDataCallBack(LLONG lAnalyzerHandle, DWORD dwAlarmType, void 
     return thisClass->AnalyzerDataCallBack(lAnalyzerHandle, dwAlarmType, pAlarmInfo, pBuffer, dwBufSize, dwUser);
 }
 
-bool SdkStubImpl::AnalyzerDataCallBack(intptr_t handle, int64_t alarmType, void *alarmInfo, uint8_t *buffer, int64_t bufSize, intptr_t userData) {
+bool SdkStubImpl::AnalyzerDataCallBack(intptr_t handle, int64_t alarmType, void *alarmInfo, uint8_t *buffer,
+                                       int64_t bufSize, intptr_t userData) {
     EventAnalyzeContext *context = (EventAnalyzeContext *)userData;
     if (nullptr == context || nullptr == context->fn || nullptr == alarmInfo || nullptr == buffer) {
         return false;
@@ -818,7 +828,8 @@ bool SdkStubImpl::MessageCallBack(uint64_t cmd, char *buffer, uint64_t bufSize, 
 }
 
 
-int32_t SdkStubImpl::StartEventAnalyze(const std::string &devId, OnAnalyzeData onData, void *userData, intptr_t &jobId) {
+int32_t SdkStubImpl::StartEventAnalyze(const std::string &devId, OnAnalyzeData onData, void *userData,
+                                       intptr_t &jobId) {
     std::unique_ptr< EventAnalyzeContext> context(new EventAnalyzeContext());
     context->fn = onData;
     context->thisClass = this;
@@ -896,7 +907,8 @@ int32_t SdkStubImpl::SnapPicture(const std::string &devId, uint8_t *imgBuf, uint
 int32_t SdkStubImpl::GetFtp(const std::string &devId, FtpInfo &ftpInfo) {
     DHDEV_FTP_PROTO_CFG ftpCfg = { 0 };
     DWORD bytesReturn = 0;
-    CHECK(CLIENT_GetDevConfig(handle_, DH_DEV_FTP_PROTO_CFG, atoi(devId.c_str()), &ftpCfg, sizeof(DHDEV_FTP_PROTO_CFG), &bytesReturn),
+    CHECK(CLIENT_GetDevConfig(handle_, DH_DEV_FTP_PROTO_CFG, atoi(devId.c_str()), &ftpCfg, sizeof(DHDEV_FTP_PROTO_CFG),
+                              &bytesReturn),
           "CLIENT_GetDevConfig");
     ftpInfo.enable = ftpCfg.bEnable;
     ftpInfo.hostIp = ftpCfg.szHostIp;
@@ -915,7 +927,8 @@ int32_t SdkStubImpl::SetFtp(const std::string &devId, const FtpInfo &ftpInfo) {
     strcpy(ftpCfg.szUserName, ftpInfo.user.c_str());
     strcpy(ftpCfg.szPassword, ftpInfo.password.c_str());
     strcpy(ftpCfg.szDirName, ftpInfo.dir0.c_str());
-    CHECK(CLIENT_SetDevConfig(handle_, DH_DEV_FTP_PROTO_CFG, atoi(devId.c_str()), &ftpCfg, sizeof(DHDEV_FTP_PROTO_CFG)), "CLIENT_GetDevConfig");
+    CHECK(CLIENT_SetDevConfig(handle_, DH_DEV_FTP_PROTO_CFG, atoi(devId.c_str()), &ftpCfg, sizeof(DHDEV_FTP_PROTO_CFG)),
+          "CLIENT_GetDevConfig");
     return 0;
 }
 

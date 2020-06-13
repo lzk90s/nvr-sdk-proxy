@@ -54,7 +54,7 @@ public:
 
         std::vector<sdk::VisitorsFlowRateHistory> histories;
         int ret = sdk->QueryVisitorsFlowRateHistory(devId, atoi(granularity.c_str()),
-                                                    sdk::TimePoint().FromString(startTime), sdk::TimePoint().FromString(endTime), histories);
+                  sdk::TimePoint().FromString(startTime), sdk::TimePoint().FromString(endTime), histories);
         if (0 != ret) {
             LOG_INFO("Failed to query visitors flow rate history");
             parser.SetResponseError(brpc::HTTP_STATUS_INTERNAL_SERVER_ERROR, "Failed to query visitors flow rate history");

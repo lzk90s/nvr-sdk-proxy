@@ -34,7 +34,7 @@ public:
         std::string strVendors = std::getenv("SDK_VENDORS") ? std::getenv("SDK_VENDORS") : "dahuanvr,hikvisionnvr";
         std::vector<std::string> vendors;
         const char *d = ",";
-        char *p = strtok((char*)strVendors.c_str(), d);
+        char *p = strtok((char *)strVendors.c_str(), d);
         while (p) {
             vendors.push_back(p);
             p = strtok(nullptr, d);
