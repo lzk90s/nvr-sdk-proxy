@@ -122,28 +122,19 @@ int32_t SdkStubImpl::Login(const std::string &ip, const std::string &user, const
 
     this->ip_ = ip;
 
-    NET_DVR_USER_LOGIN_INFO loginInfo = { 0 };
-    strncpy(loginInfo.sDeviceAddress, ip.c_str(), NET_DVR_DEV_ADDRESS_MAX_LEN - 1);
-    loginInfo.wPort = GetPort();
-    strncpy(loginInfo.sUserName, user.c_str(), NET_DVR_LOGIN_USERNAME_MAX_LEN - 1);
-    strncpy(loginInfo.sPassword, password.c_str(), NET_DVR_LOGIN_PASSWD_MAX_LEN - 1);
-    loginInfo.bUseAsynLogin = FALSE;
-
-    NET_DVR_DEVICEINFO_V40 devInfo = { 0 };
-    handle_ = NET_DVR_Login_V40(&loginInfo, &devInfo);
+    NET_DVR_DEVICEINFO_V30 devInfo = { 0 };
+    handle_ = NET_DVR_Login_V30((char *)ip.c_str(), GetPort(), (char *)user.c_str(), (char *)password.c_str(), &devInfo);
     if ((LONG)handle_ < 0) {
         ret = NET_DVR_GetLastError();
         STUB_LLOG_ERROR("Failed to login {}, ret {}", ip, ret);
         return ret;
     }
 
-    channelNum_ = devInfo.struDeviceV30.byChanNum + devInfo.struDeviceV30.byIPChanNum;
-    startChan_ = devInfo.struDeviceV30.byStartChan;
-    ip_ = ip;
+    channelNum_ = devInfo.byChanNum + devInfo.byIPChanNum;
+    startChan_ = devInfo.byStartChan;
 
-    STUB_LLOG_INFO("Succeed to login {}, handle {}", ip, handle_);
-    STUB_LLOG_INFO("SerialNumber={}, DVRType={}, ChannelNum={}", devInfo.struDeviceV30.sSerialNumber,
-                   devInfo.struDeviceV30.byDVRType, channelNum_);
+    STUB_LLOG_INFO("Succeed to login {} with {}, handle {}", ip, user, handle_);
+    STUB_LLOG_INFO("SerialNumber={}, DVRType={}, ChannelNum={}", devInfo.sSerialNumber, devInfo.byDVRType, channelNum_);
 
     return 0;
 }
@@ -205,6 +196,8 @@ int32_t SdkStubImpl::QueryDevice(std::vector<Device> &devices) {
             }
         }
     }
+
+    STUB_LLOG_INFO("Succeed to query device, num {}", devices.size());
 
     return 0;
 }

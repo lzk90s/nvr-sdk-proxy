@@ -59,11 +59,9 @@ public:
         try {
             return sdk::SDK_MNG().TryLoginAndGet(GetIp(), GetUser(), GetPassword());
         } catch (sdk::NetworkException &e) {
-            LOG_INFO("TryLoginAndGet error, {}", e.what());
             SetResponseError(brpc::HTTP_STATUS_REQUEST_TIMEOUT, e.what());
             return nullptr;
         } catch (sdk::LoginException &e) {
-            LOG_INFO("TryLoginAndGet error, {}", e.what());
             SetResponseError(brpc::HTTP_STATUS_UNAUTHORIZED, e.what());
             return nullptr;
         }

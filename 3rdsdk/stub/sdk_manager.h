@@ -40,10 +40,9 @@ public:
             return nullptr;
         }
 
-        std::shared_ptr<SdkStub> stub = nullptr;
         std::string key = buildSdkKey(ip);
 
-        // 1. find from cache
+        // find from cache
         {
             std::unique_lock<std::mutex> lck(mutex_);
             if (sdks_.find(key) != sdks_.end()) {
@@ -51,39 +50,20 @@ public:
             }
         }
 
-        // 2. probe with vendor
-        std::string vendor;
         try {
-            if (metaStore_.Get(key, vendor)) {
-                LOG_INFO("Get vendor from meta storage succeed, address {}, vendor {}", ip, vendor);
-                stub = probe(vendor, ip, user, password);
-            }
-        } catch (...) {
-            // continue probe
-        }
+            auto stub = tryProbe(ip, user, password);
 
-        // 3. probe without vendor
-        try {
-            if (nullptr == stub) {
-                stub = probe("", ip, user, password);
-            }
-        } catch (std::exception &e) {
-            LOG_ERROR("Probe address {} failed with user {} and password {}, {}", ip, user, password, e.what());
-            throw;
-        }
-
-        // 4. store the data
-        {
+            // save to cache
             std::unique_lock<std::mutex> lck(mutex_);
             sdks_[key] = stub;
-            if (vendor != stub->GetVendor()) {
-                metaStore_.Put(key, stub->GetVendor());
-            }
+
+            LOG_INFO("Probe address {} succeed, {}", ip, stub->GetDescription());
+
+            return stub;
+        } catch (std::exception &e) {
+            LOG_ERROR("Probe address {} failed, {}", ip, e.what());
+            throw;
         }
-
-        LOG_INFO("Probe address {} succeed, {}", ip, stub->GetDescription());
-
-        return stub;
     }
 
     ~SdkManager() {
@@ -95,18 +75,62 @@ public:
     }
 
 private:
-    std::string buildSdkKey(const std::string &ip) {
-        return ip;
+    std::shared_ptr<SdkStub> tryProbe(const std::string &ip, const std::string &user, const std::string &password) {
+        std::shared_ptr<SdkStub> stub = nullptr;
+        std::string key = buildSdkKey(ip);
+
+        // 1. get vendor from storage
+        std::string vendor;
+        if (metaStore_.Get(key, vendor)) {
+            LOG_INFO("Found vendor {} for address {} in storage", vendor, ip);
+        }
+
+        // 2. probe with specific vendor
+        if (!vendor.empty()) {
+            try {
+                stub = probe(std::vector<std::string> { vendor }, ip, user, password);
+            } catch (LoginException &e) {
+                // login failed? return
+                throw;
+            } catch (...) {
+                // other exception, continue other probe progress
+            }
+        }
+
+        // 3. probe with all vendor
+        if (nullptr == stub) {
+            auto allVendors = SdkStubFactory::GetVendors();
+            std::vector<std::string> vendorList;
+            std::copy_if(allVendors.begin(), allVendors.end(), std::back_inserter(vendorList), [vendor](const std::string & v) {
+                return vendor != v;
+            });
+
+            try {
+                stub = probe(vendorList, ip, user, password);
+            } catch (std::exception &e) {
+                throw;
+            }
+        }
+
+        // 4. store the data
+        if (nullptr != stub && vendor != stub->GetVendor()) {
+            metaStore_.Put(key, stub->GetVendor());
+        }
+
+        return stub;
     }
 
-    std::shared_ptr<SdkStub> probe(const std::string &vendor, const std::string &ip, const  std::string &user,
-                                   const std::string &password) throw (NetworkException, LoginException) {
+    std::shared_ptr<SdkStub> probe(const  std::vector<std::string> &vendorList, const std::string &ip,
+                                   const  std::string &user, const std::string &password) throw (NetworkException, LoginException) {
+        if (vendorList.empty()) {
+            return nullptr;
+        }
+
         std::shared_ptr<SdkStub> stub = nullptr;
         std::vector<std::future<int>> results;
-        auto probeVendors = vendor.empty() ? SdkStubFactory::GetVendors() : std::vector<std::string> { vendor };
 
         //start asynchronous probe
-        for (auto &v : probeVendors) {
+        for (auto &v : vendorList) {
             results.push_back(probeWorker_.commit([this, v, ip, user, password, &stub]() {
                 std::shared_ptr<SdkStub> s = SdkStubFactory::Create(v);
                 //quick check the address
@@ -168,6 +192,10 @@ private:
         }
         close(fd);
         return reachable;
+    }
+
+    std::string buildSdkKey(const std::string &ip) {
+        return ip;
     }
 
 private:

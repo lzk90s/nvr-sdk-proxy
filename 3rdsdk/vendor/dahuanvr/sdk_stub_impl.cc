@@ -170,7 +170,6 @@ int32_t SdkStubImpl::Login(const std::string &ip, const std::string &user, const
 }
 
 int32_t SdkStubImpl::Logout() {
-    STUB_LLOG_INFO("Logout {}", handle_);
     CLIENT_Logout(handle_);
     return 0;
 }
