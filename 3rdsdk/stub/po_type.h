@@ -87,6 +87,8 @@ enum AlarmEventType {
     DOOR = 5,
     //人员聚集
     GATHER = 6,
+    //垃圾暴露
+    GARBAGE_EXPOSURE = 7,
 };
 
 typedef struct tagBaseEvent {
@@ -258,9 +260,15 @@ typedef struct tagAcsEvent : public BaseEvent {
     std::string openMethod;
 } AcsEvent;
 
+//人员聚集事件
 typedef struct tagGatherEvent : public BaseEvent {
     int32_t action;
 } GatherEvent;
+
+//垃圾暴露事件
+typedef struct tagGarbageExposureEvent : public BaseEvent {
+    int32_t action;
+} GarbageExposureEvent;
 
 }
 }

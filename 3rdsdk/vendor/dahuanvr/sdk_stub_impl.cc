@@ -67,6 +67,13 @@ public:
         int nTryTime = 3;
         CLIENT_SetConnectTime(nWaitTime, nTryTime);
 
+        // LOG_SET_PRINT_INFO logInfo;
+        // logInfo.dwSize = sizeof(LOG_SET_PRINT_INFO);
+        // logInfo.nPrintStrategy = 1;
+        // logInfo.bSetFilePath = true;
+        // strcpy(logInfo.szLogFilePath, "/var/log/");
+        // CLIENT_LogOpen(&logInfo);
+
         NET_PARAM param;
         param.nWaittime = TIMEOUT;
         param.nGetDevInfoTime = TIMEOUT;
@@ -75,6 +82,7 @@ public:
     }
 
     ~SdkHolder() {
+        //CLIENT_LogClose();
         CLIENT_Cleanup();
     }
 
@@ -99,13 +107,6 @@ static void fromTimePoint(const TimePoint &tp, NET_TIME &tm) {
     tm.dwHour = tp.hour;
     tm.dwMinute = tp.minute;
     tm.dwSecond = tp.second;
-}
-
-static std::string getCurrentDateTime(const std::string &format = "%F %T") {
-    auto t = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    std::stringstream ss;
-    ss << std::put_time(std::localtime(&t), format.c_str());
-    return ss.str();
 }
 
 static std::string netTimeToString(const NET_TIME_EX &tm) {
@@ -589,38 +590,37 @@ bool SdkStubImpl::AnalyzerDataCallBack(intptr_t handle, int64_t alarmType, void 
             return false;
         }
 
-        IllegalParkingEvent info;
-        info.rect = parseBoundingBox(rectBoundingBox, nWidth, nHeight);
-        info.id = std::to_string(data.nEventID);
-        info.dateTime = netTimeToString(data.UTC);
-        info.plateNumber = data.stTrafficCar.szPlateNumber;
-        info.plateColor = std::to_string(mappingConvert(plateColorMapping, data.stTrafficCar.szPlateColor));
-        info.plateType = std::to_string(mappingConvert(platTypeMapping, data.stTrafficCar.szPlateType));
-        info.vehicleColor = std::to_string(mappingConvert(vehicleColorMapping, data.stTrafficCar.szVehicleColor));
-        info.vehicleType = std::to_string(mappingConvert(vehicleTypeMapping, data.stuVehicle.szObjectSubType));
-        info.vehicleSize = vehicleSizeToString(data.stTrafficCar.nVehicleSize);
-        info.lane = std::to_string(data.stTrafficCar.nLane);
-        info.imageGroupId = std::to_string(data.stuFileInfo.nGroupId);
-        info.imageIndex = data.stuFileInfo.bIndex;
-        info.imageCount = data.stuFileInfo.bCount;
-        info.violationCode = data.stTrafficCar.szViolationCode;
-        info.violationDesc = data.stTrafficCar.szViolationDesc;
+        IllegalParkingEvent event;
+        event.rect = parseBoundingBox(rectBoundingBox, nWidth, nHeight);
+        event.id = std::to_string(data.nEventID);
+        event.dateTime = netTimeToString(data.UTC);
+        event.plateNumber = data.stTrafficCar.szPlateNumber;
+        event.plateColor = std::to_string(mappingConvert(plateColorMapping, data.stTrafficCar.szPlateColor));
+        event.plateType = std::to_string(mappingConvert(platTypeMapping, data.stTrafficCar.szPlateType));
+        event.vehicleColor = std::to_string(mappingConvert(vehicleColorMapping, data.stTrafficCar.szVehicleColor));
+        event.vehicleType = std::to_string(mappingConvert(vehicleTypeMapping, data.stuVehicle.szObjectSubType));
+        event.vehicleSize = vehicleSizeToString(data.stTrafficCar.nVehicleSize);
+        event.lane = std::to_string(data.stTrafficCar.nLane);
+        event.imageGroupId = std::to_string(data.stuFileInfo.nGroupId);
+        event.imageIndex = data.stuFileInfo.bIndex;
+        event.imageCount = data.stuFileInfo.bCount;
+        event.violationCode = data.stTrafficCar.szViolationCode;
+        event.violationDesc = data.stTrafficCar.szViolationDesc;
 
         //没有车牌号的，直接跳过
-        if (info.plateNumber == "") {
+        if (event.plateNumber == "") {
             break;
         }
 
-        context->fn(handle, AlarmEventType::ILLEGAL_PARKING, ((json)info).dump(), buffer, bufSize,
-                    context->userData);
+        context->fn(handle, AlarmEventType::ILLEGAL_PARKING, ((json)event).dump(), buffer, bufSize, context->userData);
         break;
     }
     //人数量统计
     case EVENT_IVS_NUMBERSTAT: {
         DEV_EVENT_NUMBERSTAT_INFO &data = *((DEV_EVENT_NUMBERSTAT_INFO *)alarmInfo);
 
-        PersonNumEvent info;
-        info.ruleName = data.szName;
+        PersonNumEvent event;
+        event.ruleName = data.szName;
 
         break;
     }
@@ -644,22 +644,20 @@ bool SdkStubImpl::AnalyzerDataCallBack(intptr_t handle, int64_t alarmType, void 
             return false;
         }
 
-        VehicleCaptureEvent info;
-        info.rect = parseBoundingBox(rectBoundingBox, nWidth, nHeight);
-        info.plateNumber = data.stTrafficCar.szPlateNumber;
-        info.plateType = std::to_string(mappingConvert(platTypeMapping, data.stTrafficCar.szPlateType));
-        info.plateColor = std::to_string(mappingConvert(plateColorMapping, data.stTrafficCar.szPlateColor));
-        info.vehicleColor = std::to_string(mappingConvert(vehicleColorMapping, data.stTrafficCar.szVehicleColor));
-        info.vehicleType = std::to_string(mappingConvert(vehicleTypeMapping, data.stuVehicle.szObjectSubType));
+        VehicleCaptureEvent event;
+        event.rect = parseBoundingBox(rectBoundingBox, nWidth, nHeight);
+        event.plateNumber = data.stTrafficCar.szPlateNumber;
+        event.plateType = std::to_string(mappingConvert(platTypeMapping, data.stTrafficCar.szPlateType));
+        event.plateColor = std::to_string(mappingConvert(plateColorMapping, data.stTrafficCar.szPlateColor));
+        event.vehicleColor = std::to_string(mappingConvert(vehicleColorMapping, data.stTrafficCar.szVehicleColor));
+        event.vehicleType = std::to_string(mappingConvert(vehicleTypeMapping, data.stuVehicle.szObjectSubType));
 
         //没有车牌号的，直接跳过
-        if (info.plateNumber == "") {
+        if (event.plateNumber == "") {
             break;
         }
 
-        context->fn(handle, AlarmEventType::VEHICLE_CAPTURE, ((json)info).dump(), buffer, bufSize,
-                    context->userData);
-
+        context->fn(handle, AlarmEventType::VEHICLE_CAPTURE, ((json)event).dump(), buffer, bufSize, context->userData);
         break;
     }
     case EVENT_IVS_TRAFFICGATE: {
@@ -672,20 +670,20 @@ bool SdkStubImpl::AnalyzerDataCallBack(intptr_t handle, int64_t alarmType, void 
             return false;
         }
 
-//         VehicleCaptureEvent info;
-//         info.rect = parseBoundingBox(rectBoundingBox, nWidth, nHeight);
-//         info.plateNumber = data.stTrafficCar.szPlateNumber;
-//         info.plateType = std::to_string(mappingConvert(platTypeMapping, data.stuVehicle.ty));
-//         info.plateColor = std::to_string(mappingConvert(plateColorMapping, data.stTrafficCar.szPlateColor));
-//         info.vehicleColor = std::to_string(mappingConvert(vehicleColorMapping, data.stTrafficCar.szVehicleColor));
-//         info.vehicleType = std::to_string(mappingConvert(vehicleTypeMapping, data.stuVehicle.szObjectSubType));
+//         VehicleCaptureEvent event;
+//         event.rect = parseBoundingBox(rectBoundingBox, nWidth, nHeight);
+//         event.plateNumber = data.stTrafficCar.szPlateNumber;
+//         event.plateType = std::to_string(mappingConvert(platTypeMapping, data.stuVehicle.ty));
+//         event.plateColor = std::to_string(mappingConvert(plateColorMapping, data.stTrafficCar.szPlateColor));
+//         event.vehicleColor = std::to_string(mappingConvert(vehicleColorMapping, data.stTrafficCar.szVehicleColor));
+//         event.vehicleType = std::to_string(mappingConvert(vehicleTypeMapping, data.stuVehicle.szObjectSubType));
 
 //         //没有车牌号的，直接跳过
-//         if (info.plateNumber == "") {
+//         if (event.plateNumber == "") {
 //             break;
 //         }
 //
-//         context->fn(lAnalyzerHandle, AlarmEventType::VEHICLE_CAPTURE, ((json)info).dump(), pBuffer, dwBufSize, context->userData);
+//         context->fn(lAnalyzerHandle, AlarmEventType::VEHICLE_CAPTURE, ((json)event).dump(), pBuffer, dwBufSize, context->userData);
         break;
     }
     case EVENT_IVS_TRAFFIC_TOLLGATE: {
@@ -693,10 +691,17 @@ bool SdkStubImpl::AnalyzerDataCallBack(intptr_t handle, int64_t alarmType, void 
     }
     case EVENT_IVS_ACCESS_CTL: {
         DEV_EVENT_ACCESS_CTL_INFO &data = *((DEV_EVENT_ACCESS_CTL_INFO *)alarmInfo);
-        AcsEvent info;
-        info.dateTime = netTimeToString(data.UTC);
-        info.type = (int32_t)data.emEventType;
-        info.openMethod = data.emOpenMethod;
+        AcsEvent event;
+        event.dateTime = netTimeToString(data.UTC);
+        event.type = (int32_t)data.emEventType;
+        event.openMethod = data.emOpenMethod;
+        break;
+    }
+    case EVENT_IVS_GARBAGE_EXPOSURE: {
+        DEV_EVENT_GARBAGE_EXPOSURE_INFO &data = *((DEV_EVENT_GARBAGE_EXPOSURE_INFO *)alarmInfo);
+        GarbageExposureEvent event;
+        event.action = data.nAction;
+        context->fn(handle, AlarmEventType::GARBAGE_EXPOSURE, ((json)event).dump(), buffer, bufSize, context->userData);
         break;
     }
     default: {
@@ -738,11 +743,28 @@ void SdkStubImpl::VideoStatSumCallBack(uintptr_t handle, void *buffer, uint64_t 
     context->fn(handle, AlarmEventType::VISITORS_FLOWRATE, ((json)info).dump(), nullptr, 0, context->userData);
 }
 
+static std::map<intptr_t, EventAnalyzeContext *> eventContextMapping;
 
 BOOL messageCallBack(LONG lCommand, LLONG lLoginID, char *pBuf, DWORD dwBufLen, char *pchDVRIP, LONG nDVRPort,
                      BOOL bAlarmAckFlag, LONG nEventID, LDWORD dwUser) {
-    SdkStubImpl *thisClass = (SdkStubImpl *)((CallbackClosure *)dwUser)->thisClass;
-    return thisClass->MessageCallBack(lCommand, pBuf, dwBufLen, nEventID, dwUser);
+    EventAnalyzeContext *context = nullptr;
+
+    intptr_t handle = (intptr_t)lLoginID;
+
+    //double check
+    if (eventContextMapping.find(handle) != eventContextMapping.end()) {
+        if (eventContextMapping.find(handle) != eventContextMapping.end()) {
+            context = eventContextMapping[handle];
+        }
+    }
+
+    if (nullptr == context) {
+        LLOG_WARN(logger, "Login context {} not found", lLoginID);
+        return TRUE;
+    }
+
+    SdkStubImpl *thisClass = (SdkStubImpl *)(context)->thisClass;
+    return thisClass->MessageCallBack(lCommand, pBuf, dwBufLen, nEventID, (uintptr_t)context);
 }
 
 bool SdkStubImpl::MessageCallBack(uint64_t cmd, char *buffer, uint64_t bufSize,  uint64_t eventId, uintptr_t userData) {
@@ -857,6 +879,9 @@ int32_t SdkStubImpl::StartEventAnalyze(const std::string &devId, OnAnalyzeData o
 
     STUB_LLOG_INFO("Start event analyze succeed, dev {}, jobId {}", devId, context->analyzeId);
 
+    //保存到mapping中
+    eventContextMapping[this->handle_] = context.get();
+
     jobId = (intptr_t)context.get();
     context.release();  // 释放控制权
     return 0;
@@ -864,6 +889,9 @@ int32_t SdkStubImpl::StartEventAnalyze(const std::string &devId, OnAnalyzeData o
 
 int32_t SdkStubImpl::StopEventAnalyze(intptr_t &jobId) {
     std::unique_ptr<EventAnalyzeContext> context((EventAnalyzeContext *)jobId); // auto delete
+
+    eventContextMapping.erase(this->handle_);
+
     if (context->analyzeId >= 0) {
         STUB_LLOG_INFO("Stop event analyze, jobId {}", jobId);
         CHECK(CLIENT_StopLoadPic(context->analyzeId), "CLIENT_StopLoadPic");

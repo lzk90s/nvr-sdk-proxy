@@ -131,5 +131,9 @@ void to_json(json &j, const GatherEvent &p) {
     j["action"] = p.action;
 }
 
+void to_json(json &j, const GarbageExposureEvent &p) {
+    j["action"] = p.action;
+}
+
 }
 }

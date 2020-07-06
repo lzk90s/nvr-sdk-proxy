@@ -400,11 +400,17 @@ static std::map<LONG, EventContext *> alarmContextMapping;
 
 static BOOL alarmMsgCallback(LONG lCommand, LONG lUserID, char *pBuf, DWORD dwBufLen) {
     EventContext *context = nullptr;
+
     //double check
     if (alarmContextMapping.find(lUserID) != alarmContextMapping.end()) {
         if (alarmContextMapping.find(lUserID) != alarmContextMapping.end()) {
             context = alarmContextMapping[lUserID];
         }
+    }
+
+    if (nullptr == context) {
+        LLOG_WARN(logger, "Login context {} not found", lUserID);
+        return TRUE;
     }
 
     SdkStubImpl *thisClass = (SdkStubImpl *)(context)->thisClass;
