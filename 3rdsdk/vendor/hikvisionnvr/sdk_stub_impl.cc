@@ -62,6 +62,8 @@ public:
         NET_DVR_SetConnectTime(5000, 3);
         NET_DVR_SetLogPrint(FALSE);
 
+        NET_DVR_SetLogToFile(3, "/var/log/", true);
+
         LLOG_INFO(logger, "Succeed to initialize hikvision nvr sdk, the sdk version is {}, build {}", NET_DVR_GetSDKVersion(),
                   NET_DVR_GetSDKBuildVersion());
     }
@@ -110,6 +112,7 @@ SdkStubImpl::SdkStubImpl() : SdkStub("hikvisionnvr", "Hikvision net sdk", 8000) 
     Singleton<SdkHolder>::getInstance();
     channelNum_ = 0;
     startChan_ = 0;
+    handle_ = -1;
 }
 
 SdkStubImpl::~SdkStubImpl() {
@@ -140,7 +143,9 @@ int32_t SdkStubImpl::Login(const std::string &ip, const std::string &user, const
 }
 
 int32_t SdkStubImpl::Logout() {
-    NET_DVR_Logout((LONG)handle_);
+    if (handle_ >= 0) {
+        NET_DVR_Logout((LONG)handle_);
+    }
     return 0;
 }
 

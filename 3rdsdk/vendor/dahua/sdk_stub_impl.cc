@@ -69,6 +69,7 @@ static void fromTimePoint(const TimePoint &tp, time_t &tm) {
 }
 
 SdkStubImpl::SdkStubImpl() : SdkStub("dahua", "Dahua platform sdk", 9000) {
+    handle_ = -1;
 }
 
 SdkStubImpl::~SdkStubImpl() {
@@ -118,7 +119,9 @@ int32_t SdkStubImpl::Login(const std::string &ip, const std::string &user, const
 }
 
 int32_t SdkStubImpl::Logout() {
-    DPSDK_Logout(handle_);
+    if (handle_ >= 0) {
+        DPSDK_Logout(handle_);
+    }
     return 0;
 }
 

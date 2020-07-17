@@ -23,6 +23,7 @@
 #include "server/util/io_util.h"
 #include "server/util/progressive_attachment_util.h"
 #include "server/service/http_request_parser.h"
+#include "server/util/pipe_guard.h"
 
 namespace sdkproxy {
 
@@ -97,8 +98,8 @@ public:
             return;
         }
 
-        int fd[2];
-        if (0 != pipe(fd)) {
+        std::shared_ptr<PipeGuard> dataPipe(new PipeGuard());
+        if (0 != dataPipe->Init()) {
             parser.SetResponseError(brpc::HTTP_STATUS_INTERNAL_SERVER_ERROR, "Open pipe failed");
             return;
         }
@@ -109,10 +110,10 @@ public:
         int ret = sdk->DownloadRecordByTime(devId, sdk::TimePoint().FromString(startTime), sdk::TimePoint().FromString(endTime),
         [ = ](intptr_t id, const uint8_t *buffer, int32_t bufferLen) {
             if (nullptr != buffer) {
-                IoUtil::writen(fd[1], (const char *)buffer, bufferLen);
+                IoUtil::writen(dataPipe->GetWriteFd(), (const char *)buffer, bufferLen);
             } else {
-                //关闭写端，会触发read返回0，可以正常退出
-                close(fd[1]);
+                //通知写完毕
+                dataPipe->NotifyWriteCompleted();
             }
         }, jobId);
 
@@ -127,17 +128,17 @@ public:
         //start thread for transport
         std::thread t([ = ]() {
             //non block I/O
-            fcntl(fd[0], F_SETFL, O_NONBLOCK);
+            fcntl(dataPipe->GetReadFd(), F_SETFL, O_NONBLOCK);
             fd_set rfdset;
 
             while (true) {
                 FD_ZERO(&rfdset);
-                FD_SET(fd[0], &rfdset);
+                FD_SET(dataPipe->GetReadFd(), &rfdset);
 
                 struct timeval tv;
                 tv.tv_sec = 30;
                 tv.tv_usec = 0;
-                int r = select(fd[0] + 1, &rfdset, nullptr, nullptr, &tv);
+                int r = select(dataPipe->GetReadFd() + 1, &rfdset, nullptr, nullptr, &tv);
                 if (-1 == r && errno == EINTR) {
                     continue;
                 } else if (-1 == r) {
@@ -151,7 +152,7 @@ public:
                 }  else {
                     //read data from pipe
                     char buf[4096];
-                    int len = read(fd[0], buf, sizeof(buf));
+                    int len = read(dataPipe->GetReadFd(), buf, sizeof(buf));
                     if ((len < 0 && errno != EAGAIN) ||
                             (len == 0) ||
                             (len > 0 && ProgressiveAttachmentUtil::writen(pa.get(), buf, len) < 0)) {
@@ -161,8 +162,6 @@ public:
             }
 
             //finished
-            close(fd[1]);
-            close(fd[0]);
             intptr_t jid = jobId;
             sdk->StopDownloadRecord(jid);
             LOG_INFO("The download is completed, dev {}, from {} to {}", devId, startTime, endTime);

@@ -52,7 +52,7 @@ do {                                                                            
 class SdkHolder {
 public:
     SdkHolder() {
-        if (FALSE == CLIENT_Init(NULL, 0)) {
+        if (FALSE == CLIENT_Init(SdkHolder::disConnect, 0)) {
             throw std::runtime_error("Init sdk error");
         }
 
@@ -62,17 +62,21 @@ public:
         // 设置断线重连
         CLIENT_SetAutoReconnect(SdkHolder::pfHaveReConnect, 0);
 
+        CLIENT_SetSubconnCallBack(SdkHolder::subDisConnect, 0);
+
         // 设置响应超时时间5s，尝试连接次数3次
         int nWaitTime = 5000;
         int nTryTime = 3;
         CLIENT_SetConnectTime(nWaitTime, nTryTime);
 
-        // LOG_SET_PRINT_INFO logInfo;
-        // logInfo.dwSize = sizeof(LOG_SET_PRINT_INFO);
-        // logInfo.nPrintStrategy = 1;
-        // logInfo.bSetFilePath = true;
-        // strcpy(logInfo.szLogFilePath, "/var/log/");
-        // CLIENT_LogOpen(&logInfo);
+        LOG_SET_PRINT_INFO logInfo;
+        logInfo.dwSize = sizeof(LOG_SET_PRINT_INFO);
+        logInfo.bSetPrintStrategy = true;
+        logInfo.nPrintStrategy = 0;
+        logInfo.bSetFilePath = true;
+        strcpy(logInfo.szLogFilePath, "/var/log/");
+        logInfo.cbSDKLogCallBack = sdkLogCallBack;
+        CLIENT_LogOpen(&logInfo);
 
         NET_PARAM param;
         param.nWaittime = TIMEOUT;
@@ -86,8 +90,20 @@ public:
         CLIENT_Cleanup();
     }
 
+    static void CALLBACK disConnect(LLONG lLoginID, char *pchDVRIP, LONG nDVRPort, LDWORD dwUser) {
+        LLOG_INFO(logger, "Device {}:{} disconnected", pchDVRIP, nDVRPort);
+    }
+
     static void CALLBACK pfHaveReConnect(LLONG lLoginID, char *pchDVRIP, LONG nDVRPort, LDWORD dwUser) {
-        LLOG_INFO(logger, "Reconnect device {}:{}", pchDVRIP, nDVRPort);
+        LLOG_INFO(logger, "Device {}:{} reconnect succeed", pchDVRIP, nDVRPort);
+    }
+
+    static int CALLBACK sdkLogCallBack(const char *szLogBuffer, unsigned int nLogSize, LDWORD dwUser) {
+    }
+
+    static void CALLBACK subDisConnect(EM_INTERFACE_TYPE emInterfaceType, BOOL bOnline, LLONG lOperateHandle,
+                                       LLONG lLoginID, LDWORD dwUser) {
+        LLOG_INFO(logger, "Sub connection disconnect, {}-{}-{}", (int)emInterfaceType, bOnline, lLoginID);
     }
 };
 
@@ -773,8 +789,8 @@ bool SdkStubImpl::MessageCallBack(uint64_t cmd, char *buffer, uint64_t bufSize, 
         return true;
     }
 
-    //排除new_file事件
-    if (cmd == DH_ALARM_NEW_FILE) {
+    //排除部分频繁上报，且不关心的事件
+    if (cmd == DH_ALARM_NEW_FILE || cmd == DH_PTZ_LOCATION_EX) {
         return true;
     }
 
