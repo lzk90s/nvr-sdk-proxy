@@ -15,18 +15,17 @@
 #include "jpeglib.h"
 #include "jerror.h"
 
-
 struct my_error_mgr {
     struct jpeg_error_mgr pub;
     jmp_buf setjmp_buffer;
 };
 
-typedef struct my_error_mgr * my_error_ptr;
+typedef struct my_error_mgr *my_error_ptr;
 
 void my_error_exit(j_common_ptr cinfo) {
     my_error_ptr myerr = (my_error_ptr)cinfo->err;
 
-    (*cinfo->err->output_message) (cinfo);
+    (*cinfo->err->output_message)(cinfo);
 
     longjmp(myerr->setjmp_buffer, 1);
 }
@@ -34,18 +33,18 @@ void my_error_exit(j_common_ptr cinfo) {
 class Jpeg2BgrConverter {
 public:
     Jpeg2BgrConverter() {
-        height = 0;
-        width = 0;
+        height     = 0;
+        width      = 0;
         rgb_buffer = nullptr;
     }
 
-    int Convert(unsigned char* jpeg_buffer, int jpeg_size) {
+    int Convert(unsigned char *jpeg_buffer, int jpeg_size) {
         struct jpeg_decompress_struct cinfo;
         struct my_error_mgr jerr;
 
         JSAMPARRAY buffer;
-        int row_stride = 0;
-        unsigned char* tmp_buffer = NULL;
+        int row_stride            = 0;
+        unsigned char *tmp_buffer = NULL;
         int rgb_size;
 
         if (jpeg_buffer == NULL) {
@@ -53,7 +52,7 @@ public:
             return -1;
         }
 
-        cinfo.err = jpeg_std_error(&jerr.pub);
+        cinfo.err           = jpeg_std_error(&jerr.pub);
         jerr.pub.error_exit = my_error_exit;
 
         if (setjmp(jerr.setjmp_buffer)) {
@@ -67,7 +66,7 @@ public:
 
         jpeg_read_header(&cinfo, TRUE);
 
-        cinfo.out_color_space = JCS_EXT_BGR; //JCS_YCbCr;  // 设置输出格式
+        cinfo.out_color_space = JCS_EXT_BGR; // JCS_YCbCr;  // 设置输出格式
 
         if (!jpeg_start_decompress(&cinfo)) {
             printf("decompress error");
@@ -75,8 +74,8 @@ public:
         }
 
         row_stride = cinfo.output_width * cinfo.output_components;
-        width = cinfo.output_width;
-        height = cinfo.output_height;
+        width      = cinfo.output_width;
+        height     = cinfo.output_height;
 
         rgb_size = row_stride * cinfo.output_height; // 总大小
 
@@ -103,17 +102,17 @@ public:
         struct my_error_mgr jerr;
 
         JSAMPARRAY buffer;
-        int row_stride = 0;
-        unsigned char* tmp_buffer = NULL;
+        int row_stride            = 0;
+        unsigned char *tmp_buffer = NULL;
         int rgb_size;
-        FILE * infile;
+        FILE *infile;
 
         if ((infile = fopen(file_name.c_str(), "rb")) == NULL) {
             fprintf(stderr, "can't open %s\n", file_name.c_str());
             return -1;
         }
 
-        cinfo.err = jpeg_std_error(&jerr.pub);
+        cinfo.err           = jpeg_std_error(&jerr.pub);
         jerr.pub.error_exit = my_error_exit;
 
         if (setjmp(jerr.setjmp_buffer)) {
@@ -127,15 +126,15 @@ public:
 
         jpeg_read_header(&cinfo, TRUE);
 
-        cinfo.out_color_space = JCS_EXT_BGR; //JCS_YCbCr;  // 设置输出格式
+        cinfo.out_color_space = JCS_EXT_BGR; // JCS_YCbCr;  // 设置输出格式
         if (!jpeg_start_decompress(&cinfo)) {
             printf("decompress error");
             return -1;
         }
 
         row_stride = cinfo.output_width * cinfo.output_components;
-        width = cinfo.output_width;
-        height = cinfo.output_height;
+        width      = cinfo.output_width;
+        height     = cinfo.output_height;
 
         rgb_size = row_stride * cinfo.output_height; // 总大小
 
@@ -157,17 +156,11 @@ public:
         return 0;
     }
 
-    unsigned char *GetImgBuffer() {
-        return rgb_buffer.get();
-    }
+    unsigned char *GetImgBuffer() { return rgb_buffer.get(); }
 
-    int GetWidth() {
-        return width;
-    }
+    int GetWidth() { return width; }
 
-    int GetHeight() {
-        return height;
-    }
+    int GetHeight() { return height; }
 
 private:
     std::unique_ptr<unsigned char[]> rgb_buffer;
@@ -175,21 +168,20 @@ private:
     int height;
 };
 
-
 class Bgr2JpegConverter {
 public:
     Bgr2JpegConverter() {
         jpeg_buffer = nullptr;
-        jpeg_size = 0;
+        jpeg_size   = 0;
     }
 
     ~Bgr2JpegConverter() {
         free(jpeg_buffer);
         jpeg_buffer = nullptr;
-        jpeg_size = 0;
+        jpeg_size   = 0;
     }
 
-    int Convert(unsigned char* rgb_buffer, int width, int height, int quality) {
+    int Convert(unsigned char *rgb_buffer, int width, int height, int quality) {
         struct jpeg_compress_struct cinfo;
         struct jpeg_error_mgr jerr;
         int row_stride = 0;
@@ -206,13 +198,13 @@ public:
 
         jpeg_mem_dest(&cinfo, &jpeg_buffer, &jpeg_size);
 
-        cinfo.image_width = width;
-        cinfo.image_height = height;
+        cinfo.image_width      = width;
+        cinfo.image_height     = height;
         cinfo.input_components = 3;
-        cinfo.in_color_space = JCS_EXT_BGR;
+        cinfo.in_color_space   = JCS_EXT_BGR;
 
         jpeg_set_defaults(&cinfo);
-        jpeg_set_quality(&cinfo, quality, true);  // todo 1 == true
+        jpeg_set_quality(&cinfo, quality, true); // todo 1 == true
         jpeg_start_compress(&cinfo, TRUE);
         row_stride = width * cinfo.input_components;
 
@@ -228,12 +220,12 @@ public:
     }
 
     int SaveJpeg(const char *filename, unsigned char *bits, int width, int height) {
-        struct jpeg_compress_struct jcinfo;  //申请jpeg压缩对象
+        struct jpeg_compress_struct jcinfo; //申请jpeg压缩对象
         struct jpeg_error_mgr jerr;
-        FILE * outfile;                 //target file
-        JSAMPROW row_pointer[1];        //pointer to JSAMPLE row[s] 一行位图
-        int     row_stride;             //每一行的字节数
-        jcinfo.err = jpeg_std_error(&jerr);   //指定错误处理器
+        FILE *outfile;                      // target file
+        JSAMPROW row_pointer[1];            // pointer to JSAMPLE row[s] 一行位图
+        int row_stride;                     //每一行的字节数
+        jcinfo.err = jpeg_std_error(&jerr); //指定错误处理器
         jpeg_create_compress(&jcinfo);      //初始化jpeg压缩对象
 
         //指定压缩后的图像所存放的目标文件，注意，目标文件应以二进制模式打开
@@ -242,20 +234,20 @@ public:
             return -1;
         }
 
-        jpeg_stdio_dest(&jcinfo, outfile);   //指定压缩后的图像所存放的目标文件
-        jcinfo.image_width = width;      // 为图的宽和高，单位为像素
-        jcinfo.image_height = height;
+        jpeg_stdio_dest(&jcinfo, outfile); //指定压缩后的图像所存放的目标文件
+        jcinfo.image_width      = width;   // 为图的宽和高，单位为像素
+        jcinfo.image_height     = height;
         jcinfo.input_components = 3;         // 在此为3,表示彩色位图， 如果是灰度图，则为1
-        jcinfo.in_color_space = JCS_EXT_BGR;         //JCS_GRAYSCALE表示灰度图，JCS_RGB表示彩色图像
+        jcinfo.in_color_space = JCS_EXT_BGR; // JCS_GRAYSCALE表示灰度图，JCS_RGB表示彩色图像
 
         jpeg_set_defaults(&jcinfo);
-        jpeg_set_quality(&jcinfo, 100, TRUE);//limit to baseline-JPEG values
+        jpeg_set_quality(&jcinfo, 100, TRUE); // limit to baseline-JPEG values
         jpeg_start_compress(&jcinfo, TRUE);
 
         row_stride = width * jcinfo.input_components; // JSAMPLEs per row in image_buffer(如果是索引图则不需要乘以3)
         //对每一行进行压缩
         while (jcinfo.next_scanline < jcinfo.image_height) {
-            //row_pointer[0] = & bits[jcinfo.next_scanline * row_stride];
+            // row_pointer[0] = & bits[jcinfo.next_scanline * row_stride];
             row_pointer[0] = &bits[(jcinfo.image_height - jcinfo.next_scanline - 1) * row_stride];
             (void)jpeg_write_scanlines(&jcinfo, row_pointer, 1);
         }
@@ -265,15 +257,11 @@ public:
         return 0;
     }
 
-    unsigned char *GetImgBuffer() {
-        return jpeg_buffer;
-    }
+    unsigned char *GetImgBuffer() { return jpeg_buffer; }
 
-    unsigned long GetSize() {
-        return jpeg_size;
-    }
+    unsigned long GetSize() { return jpeg_size; }
 
 private:
-    unsigned char* jpeg_buffer;
+    unsigned char *jpeg_buffer;
     unsigned long jpeg_size;
 };

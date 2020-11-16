@@ -5,17 +5,12 @@
 
 class CountDownLatch {
 public:
-    explicit  CountDownLatch(int count)
-        : mutex_(), condition_(), count_(count) {
-
-    }
-    ~CountDownLatch() {
-
-    }
+    explicit CountDownLatch(int count) : mutex_(), condition_(), count_(count) {}
+    ~CountDownLatch() {}
 
     void wait() {
         std::unique_lock<std::mutex> lock(mutex_);
-        while (count_ > 0) {  //只要计数值大于0，CountDownLatch类就不工作，知道等待计数值为0
+        while (count_ > 0) { //只要计数值大于0，CountDownLatch类就不工作，知道等待计数值为0
             condition_.wait(lock);
         }
     }
@@ -32,7 +27,6 @@ public:
         std::unique_lock<std::mutex> lock(mutex_);
         return count_;
     }
-
 
 private:
     mutable std::mutex mutex_;

@@ -9,7 +9,7 @@
 查询某个第三方平台/NVR下的所有通道接口，添加设备时方便查看
 
 ```
-http://server_ip:7011/sdkproxy.DeviceQueryService/Query?ip=172.18.18.188&port=37777&user=admin&password=admin
+http://server_ip:7011/sdkproxy.DeviceQueryService/Query?ip=172.18.18.188&user=admin&password=admin
 
 server_ip：本服务的地址
 ip：NVR/相机/第三方平台的IP地址

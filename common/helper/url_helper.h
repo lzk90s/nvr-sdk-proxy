@@ -20,28 +20,27 @@ struct url {
 /*
  Helper Functions
  */
-static inline std::string TailSlice(std::string &subject, std::string delimiter, bool keep_delim=false) {
+static inline std::string TailSlice(std::string &subject, std::string delimiter, bool keep_delim = false) {
     auto delimiter_location = subject.find(delimiter);
-    auto delimiter_length = delimiter.length();
-    std::string output = "";
+    auto delimiter_length   = delimiter.length();
+    std::string output      = "";
 
     if (delimiter_location < std::string::npos) {
         auto start = keep_delim ? delimiter_location : delimiter_location + delimiter_length;
-        auto end = subject.length() - start;
-        output = subject.substr(start, end);
-        subject = subject.substr(0, delimiter_location);
+        auto end   = subject.length() - start;
+        output     = subject.substr(start, end);
+        subject    = subject.substr(0, delimiter_location);
     }
     return output;
 }
 
 static inline std::string HeadSlice(std::string &subject, std::string delimiter) {
     auto delimiter_location = subject.find(delimiter);
-    auto delimiter_length = delimiter.length();
-    std::string output = "";
+    auto delimiter_length   = delimiter.length();
+    std::string output      = "";
     if (delimiter_location < std::string::npos) {
-        output = subject.substr(0, delimiter_location);
-        subject = subject.substr(delimiter_location + delimiter_length,
-                                 subject.length() - (delimiter_location + delimiter_length));
+        output  = subject.substr(0, delimiter_location);
+        subject = subject.substr(delimiter_location + delimiter_length, subject.length() - (delimiter_location + delimiter_length));
     }
     return output;
 }
@@ -82,16 +81,16 @@ static inline url ParseHTTPURL(std::string &in) {
     url ret;
 
     std::string tempIn = in;
-    ret.port = -1;
+    ret.port           = -1;
 
-    ret.protocol = ExtractProtocol(tempIn);
-    ret.search = ExtractSearch(tempIn);
-    ret.path = ExtractPath(tempIn);
+    ret.protocol         = ExtractProtocol(tempIn);
+    ret.search           = ExtractSearch(tempIn);
+    ret.path             = ExtractPath(tempIn);
     std::string userpass = ExtractUserpass(tempIn);
-    ret.password = ExtractPassword(userpass);
-    ret.user = userpass;
-    ret.port = ExtractPort(tempIn);
-    ret.host = tempIn;
+    ret.password         = ExtractPassword(userpass);
+    ret.user             = userpass;
+    ret.port             = ExtractPort(tempIn);
+    ret.host             = tempIn;
 
     return ret;
 }
@@ -101,7 +100,7 @@ static inline url ParseHTTPURL(std::string &in) {
  */
 std::string URLEncode(const std::string &str_source) {
     char const *in_str = str_source.c_str();
-    int in_str_len = strlen(in_str);
+    int in_str_len     = strlen(in_str);
     std::string out_str;
 #if __cplusplus > 199711L
     unsigned char c;
@@ -112,8 +111,8 @@ std::string URLEncode(const std::string &str_source) {
     unsigned char const *from, *end;
     unsigned char hexchars[] = "0123456789ABCDEF";
 
-    from = (unsigned char *)in_str;
-    end = (unsigned char *)in_str + in_str_len;
+    from  = (unsigned char *)in_str;
+    end   = (unsigned char *)in_str + in_str_len;
     start = to = (unsigned char *)malloc(3 * in_str_len + 1);
 
     while (from < end) {
@@ -121,10 +120,7 @@ std::string URLEncode(const std::string &str_source) {
 
         if (c == ' ') {
             *to++ = '+';
-        } else if ((c < '0' && c != '-' && c != '.') ||
-                   (c < 'A' && c > '9') ||
-                   (c > 'Z' && c < 'a' && c != '_') ||
-                   (c > 'z')) {
+        } else if ((c < '0' && c != '-' && c != '.') || (c < 'A' && c > '9') || (c > 'Z' && c < 'a' && c != '_') || (c > 'z')) {
             to[0] = '%';
             to[1] = hexchars[c >> 4]; // equal hexchars[c / 16];
             to[2] = hexchars[c & 15]; // equal hexchars[c % 16];
@@ -145,13 +141,11 @@ int _htoi(char *s) {
     int c;
 
     c = ((unsigned char *)s)[0];
-    if (isupper(c))
-        c = tolower(c);
+    if (isupper(c)) c = tolower(c);
     value = (c >= '0' && c <= '9' ? c - '0' : c - 'a' + 10) * 16;
 
     c = ((unsigned char *)s)[1];
-    if (isupper(c))
-        c = tolower(c);
+    if (isupper(c)) c = tolower(c);
     value += c >= '0' && c <= '9' ? c - '0' : c - 'a' + 10;
 
     return (value);
@@ -159,7 +153,7 @@ int _htoi(char *s) {
 
 std::string URLDecode(const std::string &str_source) {
     char const *in_str = str_source.c_str();
-    int in_str_len = strlen(in_str);
+    int in_str_len     = strlen(in_str);
     std::string out_str;
     char *str;
 
@@ -171,8 +165,7 @@ std::string URLDecode(const std::string &str_source) {
     while (in_str_len--) {
         if (*data == '+') {
             *dest = ' ';
-        } else if (*data == '%' && in_str_len >= 2 && isxdigit((int) *(data + 1))
-                   && isxdigit((int) *(data + 2))) {
+        } else if (*data == '%' && in_str_len >= 2 && isxdigit((int)*(data + 1)) && isxdigit((int)*(data + 2))) {
             *dest = (char)_htoi(data + 1);
             data += 2;
             in_str_len -= 2;
@@ -182,10 +175,10 @@ std::string URLDecode(const std::string &str_source) {
         data++;
         dest++;
     }
-    *dest = '\0';
+    *dest   = '\0';
     out_str = str;
     free(str);
     return out_str;
 }
 
-}
+} // namespace urlhelper

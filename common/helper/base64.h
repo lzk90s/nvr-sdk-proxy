@@ -17,7 +17,7 @@ public:
 
         out->resize(EncodedLength(in));
 
-        int input_len = in.size();
+        int input_len                     = in.size();
         std::string::const_iterator input = in.begin();
 
         while (input_len--) {
@@ -100,7 +100,7 @@ public:
         unsigned char a3[3];
         unsigned char a4[4];
 
-        int input_len = in.size();
+        int input_len                     = in.size();
         std::string::const_iterator input = in.begin();
 
         out->resize(DecodedLength(in));
@@ -206,7 +206,7 @@ public:
 
     static int DecodedLength(const std::string &in) {
         int numEq = 0;
-        int n = in.size();
+        int n     = in.size();
 
         for (std::string::const_reverse_iterator it = in.rbegin(); *it == '='; ++it) {
             ++numEq;
@@ -215,27 +215,23 @@ public:
         return ((6 * n) / 8) - numEq;
     }
 
-    inline static int EncodedLength(size_t length) {
-        return (length + 2 - ((length + 2) % 3)) / 3 * 4;
-    }
+    inline static int EncodedLength(size_t length) { return (length + 2 - ((length + 2) % 3)) / 3 * 4; }
 
-    inline static int EncodedLength(const std::string &in) {
-        return EncodedLength(in.length());
-    }
+    inline static int EncodedLength(const std::string &in) { return EncodedLength(in.length()); }
 
     inline static void StripPadding(std::string *in) {
         while (!in->empty() && *(in->rbegin()) == '=') in->resize(in->size() - 1);
     }
 
 private:
-    static inline void a3_to_a4(unsigned char * a4, unsigned char * a3) {
+    static inline void a3_to_a4(unsigned char *a4, unsigned char *a3) {
         a4[0] = (a3[0] & 0xfc) >> 2;
         a4[1] = ((a3[0] & 0x03) << 4) + ((a3[1] & 0xf0) >> 4);
         a4[2] = ((a3[1] & 0x0f) << 2) + ((a3[2] & 0xc0) >> 6);
         a4[3] = (a3[2] & 0x3f);
     }
 
-    static inline void a4_to_a3(unsigned char * a3, unsigned char * a4) {
+    static inline void a4_to_a3(unsigned char *a3, unsigned char *a4) {
         a3[0] = (a4[0] << 2) + ((a4[1] & 0x30) >> 4);
         a3[1] = ((a4[1] & 0xf) << 4) + ((a4[2] & 0x3c) >> 2);
         a3[2] = ((a4[2] & 0x3) << 6) + a4[3];
@@ -250,7 +246,5 @@ private:
         return 255;
     }
 };
-
-
 
 #endif // BASE64_H

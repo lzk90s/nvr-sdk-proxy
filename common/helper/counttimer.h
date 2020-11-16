@@ -11,7 +11,7 @@ public:
     }
 
     ~CountTimer() {
-        end_ = std::chrono::steady_clock::now();
+        end_      = std::chrono::steady_clock::now();
         auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end_ - start_).count();
         if (diff > onlyShowOverTimeUs_) {
             std::cout << "[" << name_ << "] -> " << readableTime(diff) << std::endl;
@@ -19,19 +19,18 @@ public:
     }
 
 private:
-
     std::string readableTime(long us) {
         float s;
         std::string unit;
         if (us / (1000 * 1000) >= 1) {
-            s = (float)us / (1000 * 1000);
-            unit = "s";     //秒
+            s    = (float)us / (1000 * 1000);
+            unit = "s"; //秒
         } else if (us / (1000) >= 1) {
-            s = (float)us / (1000);
-            unit = "ms";    //毫秒
+            s    = (float)us / (1000);
+            unit = "ms"; //毫秒
         } else if (us >= 1) {
-            s = (float)us;
-            unit = "us";    //微秒
+            s    = (float)us;
+            unit = "us"; //微秒
         }
 
         return std::to_string(s) + unit;
