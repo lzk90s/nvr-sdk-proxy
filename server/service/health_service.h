@@ -22,9 +22,7 @@ namespace sdkproxy {
 
 class HealthServiceImpl : public HealthService {
 public:
-    void Health(::google::protobuf::RpcController *controller,
-                const ::sdkproxy::HttpRequest *request,
-                ::sdkproxy::HttpResponse *response,
+    void Health(::google::protobuf::RpcController *controller, const ::sdkproxy::HttpRequest *request, ::sdkproxy::HttpResponse *response,
                 ::google::protobuf::Closure *done) override {
         brpc::ClosureGuard done_guard(done);
 
@@ -35,4 +33,4 @@ public:
     }
 };
 
-}
+} // namespace sdkproxy

@@ -23,13 +23,9 @@ namespace sdkproxy {
 
 class RealStreamServiceImpl final : public RealStreamService {
 public:
+    ~RealStreamServiceImpl() {}
 
-    ~RealStreamServiceImpl() {
-    }
-
-    virtual void Start(::google::protobuf::RpcController *controller,
-                       const ::sdkproxy::HttpRequest *request,
-                       ::sdkproxy::HttpResponse *response,
+    virtual void Start(::google::protobuf::RpcController *controller, const ::sdkproxy::HttpRequest *request, ::sdkproxy::HttpResponse *response,
                        ::google::protobuf::Closure *done) override {
         brpc::ClosureGuard done_guard(done);
 
@@ -56,15 +52,17 @@ public:
         }
 
         intptr_t jobId = 0;
-        int ret = sdk->StartRealStream(devId,
-        [ = ](intptr_t id, const uint8_t *buffer, int32_t bufferLen) {
-            if (nullptr != buffer) {
-                IoUtil::writen(dataPipe->GetWriteFd(), (const char *)buffer, bufferLen);
-            } else {
-                //通知写完毕
-                dataPipe->NotifyWriteCompleted();
-            }
-        }, jobId);
+        int ret        = sdk->StartRealStream(
+            devId,
+            [=](intptr_t id, const uint8_t *buffer, int32_t bufferLen) {
+                if (nullptr != buffer) {
+                    IoUtil::writen(dataPipe->GetWriteFd(), (const char *)buffer, bufferLen);
+                } else {
+                    //通知写完毕
+                    dataPipe->NotifyWriteCompleted();
+                }
+            },
+            jobId);
 
         if (0 != ret) {
             LOG_ERROR("Failed to start real stream");
@@ -74,9 +72,9 @@ public:
 
         butil::intrusive_ptr<brpc::ProgressiveAttachment> pa(cntl->CreateProgressiveAttachment());
 
-        //start thread for transport
-        std::thread t([ = ]() {
-            //non block I/O
+        // start thread for transport
+        std::thread t([=]() {
+            // non block I/O
             fcntl(dataPipe->GetReadFd(), F_SETFL, O_NONBLOCK);
             fd_set rfdset;
 
@@ -85,32 +83,33 @@ public:
                 FD_SET(dataPipe->GetReadFd(), &rfdset);
 
                 struct timeval tv;
-                tv.tv_sec = 30;
+                tv.tv_sec  = 30;
                 tv.tv_usec = 0;
-                int r = select(dataPipe->GetReadFd() + 1, &rfdset, nullptr, nullptr, &tv);
+                int r      = select(dataPipe->GetReadFd() + 1, &rfdset, nullptr, nullptr, &tv);
                 if (-1 == r && errno == EINTR) {
                     continue;
                 } else if (-1 == r) {
-                    //error
+                    // error
                     LOG_ERROR("Wait for data error");
                     break;
                 } else if (0 == r) {
-                    //timeout, no sdk data
+                    // timeout, no sdk data
                     LOG_ERROR("Wait for data timeout");
                     break;
                 } else {
-                    //read data from pipe
+                    // read data from pipe
                     char buf[4096];
                     int len = read(dataPipe->GetReadFd(), buf, sizeof(buf));
-                    if ((len < 0 && errno != EAGAIN) ||
-                            (len == 0) ||
-                            (len > 0 && ProgressiveAttachmentUtil::writen(pa.get(), buf, len) < 0)) {
+                    if ((len < 0 && errno != EAGAIN) || (len == 0) || (len > 0 && ProgressiveAttachmentUtil::writen(pa.get(), buf, len) < 0)) {
                         break;
                     }
                 }
             }
 
-            //finished
+            //通知读取完毕，当客户端主动关闭时，需要通知pipe的写端停止写
+            dataPipe->NotifyReadCompleted();
+
+            // finished
             intptr_t jid = jobId;
             sdk->StopRealStream(jid);
             LOG_INFO("The real stream is completed, dev {}", devId);
@@ -119,4 +118,4 @@ public:
     }
 };
 
-}
+} // namespace sdkproxy

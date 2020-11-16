@@ -18,16 +18,12 @@ namespace sdk {
 
 class NetworkException : public std::exception {
 public:
-    const char *what()const throw() override {
-        return "Network exception";
-    }
+    const char *what() const throw() override { return "Network exception"; }
 };
 
 class LoginException : public std::exception {
 public:
-    const char *what()const throw() override {
-        return "Login failed";
-    }
+    const char *what() const throw() override { return "Login failed"; }
 };
 
 class SdkManager {
@@ -77,7 +73,7 @@ public:
 private:
     std::shared_ptr<SdkStub> tryProbe(const std::string &ip, const std::string &user, const std::string &password) {
         std::shared_ptr<SdkStub> stub = nullptr;
-        std::string key = buildSdkKey(ip);
+        std::string key               = buildSdkKey(ip);
 
         // 1. get vendor from storage
         std::string vendor;
@@ -88,7 +84,7 @@ private:
         // 2. probe with specific vendor
         if (!vendor.empty()) {
             try {
-                stub = probe(std::vector<std::string> { vendor }, ip, user, password);
+                stub = probe(std::vector<std::string>{vendor}, ip, user, password);
             } catch (LoginException &e) {
                 // login failed? return
                 throw;
@@ -101,9 +97,7 @@ private:
         if (nullptr == stub) {
             auto allVendors = SdkStubFactory::GetVendors();
             std::vector<std::string> vendorList;
-            std::copy_if(allVendors.begin(), allVendors.end(), std::back_inserter(vendorList), [vendor](const std::string & v) {
-                return vendor != v;
-            });
+            std::copy_if(allVendors.begin(), allVendors.end(), std::back_inserter(vendorList), [vendor](const std::string &v) { return vendor != v; });
 
             try {
                 stub = probe(vendorList, ip, user, password);
@@ -120,8 +114,8 @@ private:
         return stub;
     }
 
-    std::shared_ptr<SdkStub> probe(const  std::vector<std::string> &vendorList, const std::string &ip,
-                                   const  std::string &user, const std::string &password) throw (NetworkException, LoginException) {
+    std::shared_ptr<SdkStub> probe(const std::vector<std::string> &vendorList, const std::string &ip, const std::string &user,
+                                   const std::string &password) throw(NetworkException, LoginException) {
         if (vendorList.empty()) {
             return nullptr;
         }
@@ -129,15 +123,15 @@ private:
         std::shared_ptr<SdkStub> stub = nullptr;
         std::vector<std::future<int>> results;
 
-        //start asynchronous probe
+        // start asynchronous probe
         for (auto &v : vendorList) {
             results.push_back(probeWorker_.commit([this, v, ip, user, password, &stub]() {
                 std::shared_ptr<SdkStub> s = SdkStubFactory::Create(v);
-                //quick check the address
+                // quick check the address
                 if (!isHostReachable(ip, s->GetPort())) {
                     return -1;
                 }
-                //try login
+                // try login
                 if (0 != s->Login(ip, user, password)) {
                     return -2;
                 }
@@ -146,7 +140,7 @@ private:
             }));
         }
 
-        //wait for probe result
+        // wait for probe result
         int loginErrorTimes = 0;
         for (auto &r : results) {
             int status = r.get();
@@ -157,7 +151,7 @@ private:
             }
         }
 
-        //check result
+        // check result
         if (nullptr == stub) {
             if (loginErrorTimes > 0) {
                 throw LoginException();
@@ -172,31 +166,29 @@ private:
     bool isHostReachable(const std::string &ip, int port) {
         int fd;
         struct sockaddr_in addr;
-        struct timeval timeo = { 4, 0 };
-        socklen_t len = sizeof(timeo);
-        bool reachable = true;
+        struct timeval timeo = {4, 0};
+        socklen_t len        = sizeof(timeo);
+        bool reachable       = true;
 
         fd = socket(AF_INET, SOCK_STREAM, 0);
         setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeo, len);
 
-        addr.sin_family = AF_INET;
+        addr.sin_family      = AF_INET;
         addr.sin_addr.s_addr = inet_addr(ip.c_str());
-        addr.sin_port = htons(port);
+        addr.sin_port        = htons(port);
 
         if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
             reachable = false;
-//             if (errno == EINPROGRESS) {
-//                 //timeout? return true
-//                 reachable = true;
-//             }
+            //             if (errno == EINPROGRESS) {
+            //                 //timeout? return true
+            //                 reachable = true;
+            //             }
         }
         close(fd);
         return reachable;
     }
 
-    std::string buildSdkKey(const std::string &ip) {
-        return ip;
-    }
+    std::string buildSdkKey(const std::string &ip) { return ip; }
 
 private:
     std::mutex mutex_;
@@ -209,5 +201,5 @@ SdkManager &SDK_MNG() {
     return Singleton<SdkManager>::getInstance();
 }
 
-}
-}
+} // namespace sdk
+} // namespace sdkproxy

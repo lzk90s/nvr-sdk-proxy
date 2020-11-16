@@ -27,16 +27,14 @@ public:
 
     int32_t StopRealStream(intptr_t &jobId) override;
 
-    int32_t QueryRecord(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime,
-                        std::vector<RecordInfo> &records) override;
+    int32_t QueryRecord(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime, std::vector<RecordInfo> &records) override;
 
-    int32_t DownloadRecordByTime(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime,
-                                 OnDownloadData onData, intptr_t &jobId) override;
+    int32_t DownloadRecordByTime(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime, OnDownloadData onData,
+                                 intptr_t &jobId) override;
 
     int32_t StopDownloadRecord(intptr_t &jobId) override;
 
 private:
-
     int32_t createNodeDep(const std::string &depId, int nType, std::function<void(Device &c)> onData);
 
 private:
@@ -44,6 +42,6 @@ private:
     int32_t handle_;
 };
 
-}
-}
-}
+} // namespace dahua
+} // namespace sdk
+} // namespace sdkproxy

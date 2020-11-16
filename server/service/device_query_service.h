@@ -25,9 +25,7 @@ namespace sdkproxy {
 using json = nlohmann::json;
 
 class DeviceQueryServiceImpl : public DeviceQueryService {
-    void Discovery(::google::protobuf::RpcController *controller,
-                   const ::sdkproxy::HttpRequest *request,
-                   ::sdkproxy::HttpResponse *response,
+    void Discovery(::google::protobuf::RpcController *controller, const ::sdkproxy::HttpRequest *request, ::sdkproxy::HttpResponse *response,
                    ::google::protobuf::Closure *done) override {
         brpc::ClosureGuard done_guard(done);
 
@@ -40,9 +38,7 @@ class DeviceQueryServiceImpl : public DeviceQueryService {
         }
     }
 
-    void Query(::google::protobuf::RpcController *controller,
-               const ::sdkproxy::HttpRequest *request,
-               ::sdkproxy::HttpResponse *response,
+    void Query(::google::protobuf::RpcController *controller, const ::sdkproxy::HttpRequest *request, ::sdkproxy::HttpResponse *response,
                ::google::protobuf::Closure *done) override {
         brpc::ClosureGuard done_guard(done);
 
@@ -111,4 +107,4 @@ private:
     }
 };
 
-}
+} // namespace sdkproxy

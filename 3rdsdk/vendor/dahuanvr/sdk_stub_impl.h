@@ -28,11 +28,10 @@ public:
 
     int32_t StopRealStream(intptr_t &jobId) override;
 
-    int32_t QueryRecord(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime,
-                        std::vector<RecordInfo> &records) override;
+    int32_t QueryRecord(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime, std::vector<RecordInfo> &records) override;
 
-    int32_t DownloadRecordByTime(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime,
-                                 OnDownloadData onData, intptr_t &jobId) override;
+    int32_t DownloadRecordByTime(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime, OnDownloadData onData,
+                                 intptr_t &jobId) override;
 
     int32_t StopDownloadRecord(intptr_t &jobId) override;
 
@@ -44,22 +43,20 @@ public:
 
     int32_t SetFtp(const std::string &devId, const FtpInfo &ftpInfo) override;
 
-    int32_t QueryVisitorsFlowRateHistory(const std::string &devId, int32_t granularity, const TimePoint &startTime,
-                                         const TimePoint &endTime, std::vector<VisitorsFlowRateHistory> &histories) override;
+    int32_t QueryVisitorsFlowRateHistory(const std::string &devId, int32_t granularity, const TimePoint &startTime, const TimePoint &endTime,
+                                         std::vector<VisitorsFlowRateHistory> &histories) override;
 
     int32_t SnapPicture(const std::string &devId, uint8_t *imgBuf, uint32_t &imgBufSize) override;
 
 public:
     /**-------------------------------- callback --------------------------------**/
-    bool AnalyzerDataCallBack(intptr_t handle, int64_t alarmType, void *alarmInfo, uint8_t *buffer, int64_t bufSize,
-                              intptr_t userData);
+    bool AnalyzerDataCallBack(intptr_t handle, int64_t alarmType, void *alarmInfo, uint8_t *buffer, int64_t bufSize, intptr_t userData);
 
     void VideoStatSumCallBack(uintptr_t handle, void *buffer, uint64_t bufSize, uintptr_t userData);
 
-    bool MessageCallBack(uint64_t cmd, char *buffer, uint64_t bufSize,  uint64_t eventId, uintptr_t userData);
+    bool MessageCallBack(uint64_t cmd, char *buffer, uint64_t bufSize, uint64_t eventId, uintptr_t userData);
 
-    void TimeDownLoadPosCallback(intptr_t handle, int64_t totalSize, int64_t downLoadSize, int32_t index,
-                                 void *recordfileinfo, uintptr_t userData);
+    void TimeDownLoadPosCallback(intptr_t handle, int64_t totalSize, int64_t downLoadSize, uintptr_t userData);
 
 private:
     std::mutex mutex_;
@@ -67,6 +64,6 @@ private:
     int32_t channelNum_;
 };
 
-}
-}
-}
+} // namespace dahuanvr
+} // namespace sdk
+} // namespace sdkproxy

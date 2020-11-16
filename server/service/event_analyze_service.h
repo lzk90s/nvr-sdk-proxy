@@ -50,9 +50,7 @@ public:
         client_.reset(new httplib::Client(eventUploadHost, atoi(eventUploadPort)));
     }
 
-    void Reset(::google::protobuf::RpcController *controller,
-               const ::sdkproxy::HttpRequest *request,
-               ::sdkproxy::HttpResponse *response,
+    void Reset(::google::protobuf::RpcController *controller, const ::sdkproxy::HttpRequest *request, ::sdkproxy::HttpResponse *response,
                ::google::protobuf::Closure *done) override {
         brpc::ClosureGuard done_guard(done);
 
@@ -70,9 +68,7 @@ public:
         jobCache_.clear();
     }
 
-    void Query(::google::protobuf::RpcController *controller,
-               const ::sdkproxy::HttpRequest *request,
-               ::sdkproxy::HttpResponse *response,
+    void Query(::google::protobuf::RpcController *controller, const ::sdkproxy::HttpRequest *request, ::sdkproxy::HttpResponse *response,
                ::google::protobuf::Closure *done) override {
         brpc::ClosureGuard done_guard(done);
 
@@ -91,9 +87,7 @@ public:
         cntl->response_attachment().append(j.dump());
     }
 
-    void Start(::google::protobuf::RpcController *controller,
-               const ::sdkproxy::HttpRequest *request,
-               ::sdkproxy::HttpResponse *response,
+    void Start(::google::protobuf::RpcController *controller, const ::sdkproxy::HttpRequest *request, ::sdkproxy::HttpResponse *response,
                ::google::protobuf::Closure *done) override {
         brpc::ClosureGuard done_guard(done);
 
@@ -105,11 +99,11 @@ public:
             return;
         }
 
-        std::string ip = parser.GetIp();
+        std::string ip        = parser.GetIp();
         std::string channelIp = parser.GetChannelIp();
-        std::string devId = sdk->ChannelIp2Id(channelIp);
-        std::string devCode = parser.GetQueryByKey("devCode");
-        std::string key = buildKey(ip, devId);
+        std::string devId     = sdk->ChannelIp2Id(channelIp);
+        std::string devCode   = parser.GetQueryByKey("devCode");
+        std::string key       = buildKey(ip, devId);
 
         if (devId.empty() || devCode.empty()) {
             LOG_ERROR("Invalid arguments, devId {}, devCode {}", devId, devCode);
@@ -127,16 +121,18 @@ public:
         }
 
         std::shared_ptr<JobInfo> jobInfo(new JobInfo());
-        jobInfo->sdkStub = sdk;
-        jobInfo->time = std::chrono::system_clock::now();
-        jobInfo->devCode = devCode;
+        jobInfo->sdkStub   = sdk;
+        jobInfo->time      = std::chrono::system_clock::now();
+        jobInfo->devCode   = devCode;
         jobInfo->channelIp = channelIp;
 
         intptr_t jobId = 0;
-        int32_t ret = sdk->StartEventAnalyze(devId, [this](intptr_t id, int type, const std::string & jsonData,
-        const uint8_t *imgBuffer, int32_t imgBufferLen, void *userData) {
-            uploadEvent(((JobInfo *)userData)->devCode, ((JobInfo *)userData)->channelIp, type, jsonData, imgBuffer, imgBufferLen);
-        }, (void *)jobInfo.get(), jobId);
+        int32_t ret    = sdk->StartEventAnalyze(
+            devId,
+            [this](intptr_t id, int type, const std::string &jsonData, const uint8_t *imgBuffer, int32_t imgBufferLen, void *userData) {
+                uploadEvent(((JobInfo *)userData)->devCode, ((JobInfo *)userData)->channelIp, type, jsonData, imgBuffer, imgBufferLen);
+            },
+            (void *)jobInfo.get(), jobId);
 
         if (0 != ret) {
             LOG_ERROR("Failed to start event analyze");
@@ -152,9 +148,7 @@ public:
         }
     }
 
-    void Stop(::google::protobuf::RpcController *controller,
-              const ::sdkproxy::HttpRequest *request,
-              ::sdkproxy::HttpResponse *response,
+    void Stop(::google::protobuf::RpcController *controller, const ::sdkproxy::HttpRequest *request, ::sdkproxy::HttpResponse *response,
               ::google::protobuf::Closure *done) override {
         brpc::ClosureGuard done_guard(done);
 
@@ -181,37 +175,34 @@ public:
     }
 
 private:
-    void uploadEvent(const std::string &devCode, const std::string &realIp, int alarmType,
-                     const std::string &alarmData, const uint8_t *imgBuffer, int32_t bufferLen) {
+    void uploadEvent(const std::string &devCode, const std::string &realIp, int alarmType, const std::string &alarmData, const uint8_t *imgBuffer,
+                     int32_t bufferLen) {
         std::string path = buildImagePath(devCode);
-        auto t = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+        auto t           = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
         std::stringstream ss;
         ss << std::put_time(std::localtime(&t), "%F %T");
         std::string nowDateTime = ss.str();
 
         httplib::MultipartFormDataItems items = {
-            { "path", path, "", "" },
-            { "realIp", realIp, "", "" },
-            { "dateTime", nowDateTime, "", ""},
-            { "alarmType", std::to_string(alarmType), "", ""},
-            { "alarmData", alarmData, "", "application/json" },
-            { "image", std::string((char *)imgBuffer, bufferLen), devCode + ".jpg", "image/jpeg" },
+            {"path", path, "", ""},
+            {"realIp", realIp, "", ""},
+            {"dateTime", nowDateTime, "", ""},
+            {"alarmType", std::to_string(alarmType), "", ""},
+            {"alarmData", alarmData, "", "application/json"},
+            {"image", std::string((char *)imgBuffer, bufferLen), devCode + ".jpg", "image/jpeg"},
         };
 
-        LOG_INFO("Upload alarm event, devCode = {}, realIp = {}, alarmType = {}, alarmData = {}",
-                 devCode, realIp, alarmType, alarmData);
+        LOG_INFO("Upload alarm event, devCode = {}, realIp = {}, alarmType = {}, alarmData = {}", devCode, realIp, alarmType, alarmData);
 
         client_->Post("/v3/upload", items);
     }
 
-    std::string buildKey(const std::string &ip, const std::string &devId) {
-        return ip + "_" + devId;
-    }
+    std::string buildKey(const std::string &ip, const std::string &devId) { return ip + "_" + devId; }
 
     std::string buildImagePath(const std::string &devCode) {
         std::stringstream stm;
         auto t = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-        stm << "/" << devCode << "/"  << std::put_time(std::localtime(&t), "%Y/%m/%d/%Y_%m_%d_%H_%M_%S") << "_0.jpg";
+        stm << "/" << devCode << "/" << std::put_time(std::localtime(&t), "%Y/%m/%d/%Y_%m_%d_%H_%M_%S") << "_0.jpg";
         return stm.str();
     }
 
@@ -230,4 +221,4 @@ private:
     std::string httpCallbackUrl_;
     std::shared_ptr<httplib::Client> client_;
 };
-}
+} // namespace sdkproxy

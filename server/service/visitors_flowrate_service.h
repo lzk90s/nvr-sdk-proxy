@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include <string>
 #include <cstdint>
 #include <memory>
@@ -26,10 +25,7 @@ using json = nlohmann::json;
 
 class VisitorsFlowRateServiceImpl : public VisitorsFlowRateService {
 public:
-
-    void QueryHistory(::google::protobuf::RpcController *controller,
-                      const ::sdkproxy::HttpRequest *request,
-                      ::sdkproxy::HttpResponse *response,
+    void QueryHistory(::google::protobuf::RpcController *controller, const ::sdkproxy::HttpRequest *request, ::sdkproxy::HttpResponse *response,
                       ::google::protobuf::Closure *done) override {
         brpc::ClosureGuard done_guard(done);
 
@@ -41,10 +37,10 @@ public:
             return;
         }
 
-        std::string devId = sdk->ChannelIp2Id(parser.GetChannelIp());
+        std::string devId       = sdk->ChannelIp2Id(parser.GetChannelIp());
         std::string granularity = parser.GetQueryByKey("granularity");
-        std::string startTime = parser.GetQueryByKey("startTime");
-        std::string endTime = parser.GetQueryByKey("endTime");
+        std::string startTime   = parser.GetQueryByKey("startTime");
+        std::string endTime     = parser.GetQueryByKey("endTime");
 
         if (devId.empty() || granularity.empty() || startTime.empty() || endTime.empty()) {
             LOG_ERROR("Invalid arguments");
@@ -53,8 +49,8 @@ public:
         }
 
         std::vector<sdk::VisitorsFlowRateHistory> histories;
-        int ret = sdk->QueryVisitorsFlowRateHistory(devId, atoi(granularity.c_str()),
-                  sdk::TimePoint().FromString(startTime), sdk::TimePoint().FromString(endTime), histories);
+        int ret = sdk->QueryVisitorsFlowRateHistory(devId, atoi(granularity.c_str()), sdk::TimePoint().FromString(startTime),
+                                                    sdk::TimePoint().FromString(endTime), histories);
         if (0 != ret) {
             LOG_INFO("Failed to query visitors flow rate history");
             parser.SetResponseError(brpc::HTTP_STATUS_INTERNAL_SERVER_ERROR, "Failed to query visitors flow rate history");
@@ -67,4 +63,4 @@ public:
     }
 };
 
-}
+} // namespace sdkproxy

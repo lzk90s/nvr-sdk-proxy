@@ -14,14 +14,12 @@ namespace sdk {
 typedef struct tagTimePoint {
     int32_t year, month, day, hour, minute, second;
     const char *TIME_STRING_FORMAT = "%04d-%02d-%02d %02d:%02d:%02d";
-    const char *TIME_FORMAT = "%Y-%m-%d %H:%M:%S";
+    const char *TIME_FORMAT        = "%Y-%m-%d %H:%M:%S";
 
-    tagTimePoint() {
-        year = month = day = hour = minute = second = 0;
-    }
+    tagTimePoint() { year = month = day = hour = minute = second = 0; }
 
     const std::string ToString() const {
-        char t[128] = { 0 };
+        char t[128] = {0};
         snprintf(t, sizeof(t) - 1, TIME_STRING_FORMAT, year, month, day, hour, minute, second);
         return std::string(t);
     }
@@ -35,12 +33,12 @@ typedef struct tagTimePoint {
         time_t t;
         tm tm;
         strptime(ToString().c_str(), TIME_FORMAT, &tm); //将字符串转换为tm时间
-        t = mktime(&tm); //将tm时间转换为秒时间
+        t = mktime(&tm);                                //将tm时间转换为秒时间
         return t;
     }
 
     const void FromTime(time_t t) {
-        char timestr[25] = { 0 };
+        char timestr[25] = {0};
         struct tm local_time;
         localtime_r(&t, &local_time);
         strftime(timestr, 22, TIME_FORMAT, &local_time);
@@ -50,10 +48,10 @@ typedef struct tagTimePoint {
 } TimePoint;
 
 typedef struct tagRecordInfo {
-    std::string     fileName;
-    uint32_t        fileSize;
-    TimePoint       startTime;
-    TimePoint       endTime;
+    std::string fileName;
+    uint32_t fileSize;
+    TimePoint startTime;
+    TimePoint endTime;
 } RecordInfo;
 
 typedef struct tagDevice {
@@ -68,8 +66,8 @@ typedef struct tagFtpInfo {
     int hostPort;
     std::string user;
     std::string password;
-    std::string dir0;   //一级目录
-    std::string dir1;   //二级目录
+    std::string dir0; //一级目录
+    std::string dir1; //二级目录
 } FtpInfo;
 
 enum AlarmEventType {
@@ -89,6 +87,8 @@ enum AlarmEventType {
     GATHER = 6,
     //垃圾暴露
     GARBAGE_EXPOSURE = 7,
+    //年龄识别
+    AGE_RECOGNIZE = 10,
 };
 
 typedef struct tagBaseEvent {
@@ -97,13 +97,11 @@ typedef struct tagBaseEvent {
 typedef struct tagRect {
     int32_t x, y, w, h;
 
-    tagRect() {
-        x = y = w = h = 0;
-    }
+    tagRect() { x = y = w = h = 0; }
 } Rect;
 
 typedef struct tagObject {
-    //id
+    // id
     std::string id;
     //类型
     std::string type;
@@ -123,7 +121,7 @@ typedef struct tagObject {
 
 //违停事件
 typedef struct tagIllegalParkingEvent : public BaseEvent {
-    //ID
+    // ID
     std::string id;
     //时间
     std::string dateTime;
@@ -179,9 +177,9 @@ typedef struct tagVisitorsCount {
 
     tagVisitorsCount() {
         total = 0;
-        hour = 0;
+        hour  = 0;
         today = 0;
-        osd = 0;
+        osd   = 0;
     }
 } VisitorsCount;
 
@@ -217,8 +215,8 @@ typedef struct tagVisitorsFlowRateHistory {
     int32_t maxInside;
 
     tagVisitorsFlowRateHistory() {
-        inTotal = 0;
-        outTotal = 0;
+        inTotal   = 0;
+        outTotal  = 0;
         avgInside = 0;
         maxInside = 0;
     }
@@ -270,5 +268,9 @@ typedef struct tagGarbageExposureEvent : public BaseEvent {
     int32_t action;
 } GarbageExposureEvent;
 
-}
-}
+typedef struct tagAgeRecognizeEvent : public BaseEvent {
+    int age;
+} AgeRecognizeEvent;
+
+} // namespace sdk
+} // namespace sdkproxy

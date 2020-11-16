@@ -9,5 +9,5 @@ class EmptySdkStub final : public SdkStub {
 public:
     EmptySdkStub() : SdkStub("dummy", "Invalid sdk", 0) {}
 };
-}
-}
+} // namespace sdk
+} // namespace sdkproxy

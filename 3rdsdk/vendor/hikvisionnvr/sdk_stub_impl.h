@@ -28,11 +28,10 @@ public:
 
     int32_t StopRealStream(intptr_t &jobId) override;
 
-    int32_t QueryRecord(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime,
-                        std::vector<RecordInfo> &records) override;
+    int32_t QueryRecord(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime, std::vector<RecordInfo> &records) override;
 
-    int32_t DownloadRecordByTime(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime,
-                                 OnDownloadData onData, intptr_t &jobId) override;
+    int32_t DownloadRecordByTime(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime, OnDownloadData onData,
+                                 intptr_t &jobId) override;
 
     int32_t StopDownloadRecord(intptr_t &jobId) override;
 
@@ -49,15 +48,15 @@ public:
     bool AlarmMsgCallback(int64_t cmd, char *buffer, int64_t bufferLen, intptr_t userData);
 
 private:
-    std::string  getChannelName(int channelIdx);
+    std::string getChannelName(int channelIdx);
 
 private:
     std::mutex mutex_;
     intptr_t handle_;
     int32_t channelNum_;
-    int32_t startChan_;    //模拟通道开始号
+    int32_t startChan_; //模拟通道开始号
 };
 
-}
-}
-}
+} // namespace hikvisionnvr
+} // namespace sdk
+} // namespace sdkproxy

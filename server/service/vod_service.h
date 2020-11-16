@@ -31,10 +31,7 @@ using json = nlohmann::json;
 
 class VodServiceImpl : public VodService {
 public:
-
-    void Query(::google::protobuf::RpcController *controller,
-               const ::sdkproxy::HttpRequest *request,
-               ::sdkproxy::HttpResponse *response,
+    void Query(::google::protobuf::RpcController *controller, const ::sdkproxy::HttpRequest *request, ::sdkproxy::HttpResponse *response,
                ::google::protobuf::Closure *done) override {
         brpc::ClosureGuard done_guard(done);
 
@@ -48,9 +45,9 @@ public:
             return;
         }
 
-        std::string devId = sdk->ChannelIp2Id(parser.GetChannelIp());
+        std::string devId     = sdk->ChannelIp2Id(parser.GetChannelIp());
         std::string startTime = parser.GetQueryByKey("startTime");
-        std::string endTime = parser.GetQueryByKey("endTime");
+        std::string endTime   = parser.GetQueryByKey("endTime");
 
         if (devId.empty() || startTime.empty() || endTime.empty()) {
             LOG_ERROR("Invalid arguments, devId {}, startTime {}, endTime {}", devId, startTime, endTime);
@@ -59,8 +56,7 @@ public:
         }
 
         std::vector<sdk::RecordInfo> records;
-        int ret = sdk->QueryRecord(devId, sdk::TimePoint().FromString(startTime), sdk::TimePoint().FromString(endTime),
-                                   records);
+        int ret = sdk->QueryRecord(devId, sdk::TimePoint().FromString(startTime), sdk::TimePoint().FromString(endTime), records);
         if (0 != ret) {
             LOG_INFO("Failed to query record");
             parser.SetResponseError(brpc::HTTP_STATUS_INTERNAL_SERVER_ERROR, "Failed to query record");
@@ -72,9 +68,7 @@ public:
         cntl->response_attachment().append(j.dump());
     }
 
-    void DownloadByTime(::google::protobuf::RpcController *controller,
-                        const ::sdkproxy::HttpRequest *request,
-                        ::sdkproxy::HttpResponse *response,
+    void DownloadByTime(::google::protobuf::RpcController *controller, const ::sdkproxy::HttpRequest *request, ::sdkproxy::HttpResponse *response,
                         ::google::protobuf::Closure *done) override {
         brpc::ClosureGuard done_guard(done);
 
@@ -88,9 +82,9 @@ public:
             return;
         }
 
-        std::string devId = sdk->ChannelIp2Id(parser.GetChannelIp());
+        std::string devId     = sdk->ChannelIp2Id(parser.GetChannelIp());
         std::string startTime = parser.GetQueryByKey("startTime");
-        std::string endTime = parser.GetQueryByKey("endTime");
+        std::string endTime   = parser.GetQueryByKey("endTime");
 
         if (devId.empty() || startTime.empty() || endTime.empty()) {
             LOG_ERROR("Invalid arguments, devId {}, startTime {}, endTime {}", devId, startTime, endTime);
@@ -107,15 +101,17 @@ public:
         LOG_INFO("Start to download record, dev {}, from {} to {}", devId, startTime, endTime);
 
         intptr_t jobId = 0;
-        int ret = sdk->DownloadRecordByTime(devId, sdk::TimePoint().FromString(startTime), sdk::TimePoint().FromString(endTime),
-        [ = ](intptr_t id, const uint8_t *buffer, int32_t bufferLen) {
-            if (nullptr != buffer) {
-                IoUtil::writen(dataPipe->GetWriteFd(), (const char *)buffer, bufferLen);
-            } else {
-                //通知写完毕
-                dataPipe->NotifyWriteCompleted();
-            }
-        }, jobId);
+        int ret        = sdk->DownloadRecordByTime(
+            devId, sdk::TimePoint().FromString(startTime), sdk::TimePoint().FromString(endTime),
+            [=](intptr_t id, const uint8_t *buffer, int32_t bufferLen) {
+                if (nullptr != buffer) {
+                    IoUtil::writen(dataPipe->GetWriteFd(), (const char *)buffer, bufferLen);
+                } else {
+                    //通知写完毕
+                    dataPipe->NotifyWriteCompleted();
+                }
+            },
+            jobId);
 
         if (0 != ret) {
             LOG_ERROR("Failed to download file");
@@ -125,9 +121,9 @@ public:
 
         butil::intrusive_ptr<brpc::ProgressiveAttachment> pa(cntl->CreateProgressiveAttachment());
 
-        //start thread for transport
-        std::thread t([ = ]() {
-            //non block I/O
+        // start thread for transport
+        std::thread t([=]() {
+            // non block I/O
             fcntl(dataPipe->GetReadFd(), F_SETFL, O_NONBLOCK);
             fd_set rfdset;
 
@@ -136,32 +132,33 @@ public:
                 FD_SET(dataPipe->GetReadFd(), &rfdset);
 
                 struct timeval tv;
-                tv.tv_sec = 30;
+                tv.tv_sec  = 30;
                 tv.tv_usec = 0;
-                int r = select(dataPipe->GetReadFd() + 1, &rfdset, nullptr, nullptr, &tv);
+                int r      = select(dataPipe->GetReadFd() + 1, &rfdset, nullptr, nullptr, &tv);
                 if (-1 == r && errno == EINTR) {
                     continue;
                 } else if (-1 == r) {
-                    //error
+                    // error
                     LOG_ERROR("Wait for data error");
                     break;
                 } else if (0 == r) {
-                    //timeout, no sdk data
+                    // timeout, no sdk data
                     LOG_ERROR("Wait for data timeout");
                     break;
-                }  else {
-                    //read data from pipe
+                } else {
+                    // read data from pipe
                     char buf[4096];
                     int len = read(dataPipe->GetReadFd(), buf, sizeof(buf));
-                    if ((len < 0 && errno != EAGAIN) ||
-                            (len == 0) ||
-                            (len > 0 && ProgressiveAttachmentUtil::writen(pa.get(), buf, len) < 0)) {
+                    if ((len < 0 && errno != EAGAIN) || (len == 0) || (len > 0 && ProgressiveAttachmentUtil::writen(pa.get(), buf, len) < 0)) {
                         break;
                     }
                 }
             }
 
-            //finished
+            //通知读取完毕，当客户端主动关闭时，需要通知pipe的写端停止写
+            dataPipe->NotifyReadCompleted();
+
+            // finished
             intptr_t jid = jobId;
             sdk->StopDownloadRecord(jid);
             LOG_INFO("The download is completed, dev {}, from {} to {}", devId, startTime, endTime);
@@ -170,4 +167,4 @@ public:
     }
 };
 
-}
+} // namespace sdkproxy

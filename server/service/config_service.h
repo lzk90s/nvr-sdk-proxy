@@ -25,9 +25,7 @@ using json = nlohmann::json;
 
 class ConfigServiceImpl : public ConfigService {
 public:
-    void GetFtp(::google::protobuf::RpcController *controller,
-                const ::sdkproxy::HttpRequest *request,
-                ::sdkproxy::HttpResponse *response,
+    void GetFtp(::google::protobuf::RpcController *controller, const ::sdkproxy::HttpRequest *request, ::sdkproxy::HttpResponse *response,
                 ::google::protobuf::Closure *done) override {
         brpc::ClosureGuard done_guard(done);
 
@@ -60,9 +58,7 @@ public:
         cntl->response_attachment().append(j.dump());
     }
 
-    void SetFtp(::google::protobuf::RpcController *controller,
-                const ::sdkproxy::HttpRequest *request,
-                ::sdkproxy::HttpResponse *response,
+    void SetFtp(::google::protobuf::RpcController *controller, const ::sdkproxy::HttpRequest *request, ::sdkproxy::HttpResponse *response,
                 ::google::protobuf::Closure *done) override {
         brpc::ClosureGuard done_guard(done);
 
@@ -74,7 +70,7 @@ public:
             return;
         }
 
-        std::string devId = sdk->ChannelIp2Id(parser.GetChannelIp());
+        std::string devId    = sdk->ChannelIp2Id(parser.GetChannelIp());
         std::string jsonBody = cntl->request_attachment().to_string();
 
         if (devId.empty() || jsonBody.empty()) {
@@ -83,9 +79,9 @@ public:
             return;
         }
 
-        auto j = json::parse(jsonBody.c_str());
+        auto j               = json::parse(jsonBody.c_str());
         sdk::FtpInfo ftpInfo = j.get<sdk::FtpInfo>();
-        int ret = sdk->SetFtp(devId, ftpInfo);
+        int ret              = sdk->SetFtp(devId, ftpInfo);
         if (0 != ret) {
             LOG_INFO("Failed to config ftp, ip {}", parser.GetIp());
             parser.SetResponseError(brpc::HTTP_STATUS_INTERNAL_SERVER_ERROR, "Failed to config ftp");
@@ -95,4 +91,4 @@ public:
         LOG_INFO("Succeed to config ftp, {}", j.dump());
     }
 };
-}
+} // namespace sdkproxy

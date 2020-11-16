@@ -17,14 +17,10 @@ namespace sdk {
 class SdkStubFactory {
 public:
     static std::shared_ptr<SdkStub> Create(const std::string &vendor) {
-        if ("dahua" == vendor) {
-            return std::make_shared<dahua::SdkStubImpl>();
-        } else if ("dahuanvr" == vendor) {
+        if ("dahuanvr" == vendor) {
             return std::make_shared<dahuanvr::SdkStubImpl>();
-        } else if ("hikvision" == vendor) {
-            return std::make_shared<hikvision::SdkStubImpl>();
         } else if ("hikvisionnvr" == vendor) {
-            return std::make_shared<hikvisionnvr::SdkStubImpl > ();
+            return std::make_shared<hikvisionnvr::SdkStubImpl>();
         } else {
             return std::make_shared<EmptySdkStub>();
         }
@@ -34,7 +30,7 @@ public:
         std::string strVendors = std::getenv("SDK_VENDORS") ? std::getenv("SDK_VENDORS") : "dahuanvr,hikvisionnvr";
         std::vector<std::string> vendors;
         const char *d = ",";
-        char *p = strtok((char *)strVendors.c_str(), d);
+        char *p       = strtok((char *)strVendors.c_str(), d);
         while (p) {
             vendors.push_back(p);
             p = strtok(nullptr, d);
@@ -43,5 +39,5 @@ public:
     }
 };
 
-}
-}
+} // namespace sdk
+} // namespace sdkproxy

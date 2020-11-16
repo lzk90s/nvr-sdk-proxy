@@ -11,6 +11,6 @@ public:
     SdkStubImpl();
 };
 
-}
-}
-}
+} // namespace hikvision
+} // namespace sdk
+} // namespace sdkproxy

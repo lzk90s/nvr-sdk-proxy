@@ -1,0 +1,25 @@
+FROM registry.cn-hangzhou.aliyuncs.com/gosun/dahua_sdk:latest as dahua_sdk
+FROM registry.cn-hangzhou.aliyuncs.com/gosun/dahuanvr_sdk:3.052.0000001.1.R.200514 as dahuanvr_sdk
+FROM registry.cn-hangzhou.aliyuncs.com/gosun/hikvisionnvr_sdk:6.1.4.42 as hikvisionnvr_sdk
+FROM registry.cn-hangzhou.aliyuncs.com/gosun/brpc_opencv_ffmpeg:1.2.4 as builder
+
+WORKDIR /root
+ENV CFLAGS -fPIC
+ENV CXXFLAGS -fPIC
+ENV DAHUA_SDK_HOME /root/dahua_sdk
+ENV DAHUANVR_SDK_HOME /root/dahuanvr_sdk
+ENV HIKVISION_SDK_HOME /root/hikvision_sdk
+ENV HIKVISIONNVR_SDK_HOME /root/hikvisionnvr_sdk
+ENV LC_ALL en_US.UTF-8
+ENV LD_LIBRARY_PATH ${LD_LIBRARY_PATH}:/usr/local/lib:${DAHUA_SDK_HOME}/lib:${HIKVISION_SDK_HOME}/lib:${DAHUANVR_SDK_HOME}/lib:${HIKVISIONNVR_SDK_HOME}/lib:${HIKVISIONNVR_SDK_HOME}/lib/HCNetSDKCom
+
+
+#拷贝sdk
+COPY --from=dahua_sdk $DAHUA_SDK_HOME $DAHUA_SDK_HOME
+COPY --from=dahuanvr_sdk $DAHUANVR_SDK_HOME $DAHUANVR_SDK_HOME
+COPY --from=hikvisionnvr_sdk $HIKVISIONNVR_SDK_HOME $HIKVISIONNVR_SDK_HOME
+
+RUN apt-get update -y && apt-get install -y libasound2-dev
+
+CMD ["/bin/bash"]
+

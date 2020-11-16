@@ -9,7 +9,8 @@
 #include "common/helper/singleton.h"
 
 #include "dhnetsdk.h"
-
+#include "dhplay.h"
+#include "dhplayEx.h"
 
 namespace sdkproxy {
 namespace sdk {
@@ -19,35 +20,57 @@ using json = nlohmann::json;
 static Logger logger("dahua_nvr");
 const static int TIMEOUT = 30000;
 
-#define SUFFIX(msg) std::string("[{}] ").append(msg)
+#define SUFFIX(msg)               std::string("[{}] ").append(msg)
 #define STUB_LLOG_DEBUG(fmt, ...) LLOG_DEBUG(logger, SUFFIX(fmt), (this)->ip_, ##__VA_ARGS__)
-#define STUB_LLOG_INFO(fmt, ...) LLOG_INFO(logger, SUFFIX(fmt), (this)->ip_, ##__VA_ARGS__)
-#define STUB_LLOG_WARN(fmt, ...) LLOG_WARN(logger, SUFFIX(fmt), this->ip_, ##__VA_ARGS__)
+#define STUB_LLOG_INFO(fmt, ...)  LLOG_INFO(logger, SUFFIX(fmt), (this)->ip_, ##__VA_ARGS__)
+#define STUB_LLOG_WARN(fmt, ...)  LLOG_WARN(logger, SUFFIX(fmt), this->ip_, ##__VA_ARGS__)
 #define STUB_LLOG_ERROR(fmt, ...) LLOG_ERROR(logger, SUFFIX(fmt), this->ip_, ##__VA_ARGS__)
 
 const inline DWORD lastError() {
     return CLIENT_GetLastError() & 0x7fffffff;
 }
 
-#define CHECK(method_call, msg)                                                         \
-do {                                                                                    \
-    BOOL __result = FALSE;                                                              \
-    if ((__result= (method_call)) != TRUE) {                                            \
-        DWORD err = lastError();                                                        \
-        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", err, msg); return err;      \
-    }                                                                                   \
-} while (0)
+#define CHECK(method_call, msg)                                            \
+    do {                                                                   \
+        BOOL __result = FALSE;                                             \
+        if ((__result = (method_call)) != TRUE) {                          \
+            DWORD err = lastError();                                       \
+            STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", err, msg); \
+            return err;                                                    \
+        }                                                                  \
+    } while (0)
 
-#define CHECK_EX(method_call, msg, defer)                                               \
-do {                                                                                    \
-    BOOL __result = FALSE;                                                              \
-    if ((__result= (method_call)) != TRUE) {                                            \
-        DWORD err = lastError();                                                        \
-        STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", err, msg); return err;      \
-        (defer)();                                                                      \
-    }                                                                                   \
-} while (0)
+#define CHECK_EX(method_call, msg, defer)                                  \
+    do {                                                                   \
+        BOOL __result = FALSE;                                             \
+        if ((__result = (method_call)) != TRUE) {                          \
+            DWORD err = lastError();                                       \
+            STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", err, msg); \
+            return err;                                                    \
+            (defer)();                                                     \
+        }                                                                  \
+    } while (0)
 
+#define PLAYER_CHECK(method_call, msg)                                     \
+    do {                                                                   \
+        BOOL __result = FALSE;                                             \
+        if ((__result = (method_call)) != TRUE) {                          \
+            DWORD err = PLAY_GetLastErrorEx();                             \
+            STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", err, msg); \
+            return err;                                                    \
+        }                                                                  \
+    } while (0)
+
+#define PLAYER_CHECK_EX(method_call, msg, defer)                           \
+    do {                                                                   \
+        BOOL __result = FALSE;                                             \
+        if ((__result = (method_call)) != TRUE) {                          \
+            DWORD err = PLAY_GetLastErrorEx();                             \
+            STUB_LLOG_ERROR("Call sdk error, result [{}] - {}", err, msg); \
+            return err;                                                    \
+            (defer)();                                                     \
+        }                                                                  \
+    } while (0)
 
 class SdkHolder {
 public:
@@ -56,8 +79,9 @@ public:
             throw std::runtime_error("Init sdk error");
         }
 
-        DWORD sdkVersion = CLIENT_GetSDKVersion();
-        LLOG_INFO(logger, "Succeed to initialize dahua nvr sdk, the sdk version is {}", sdkVersion);
+        DWORD sdkVersion    = CLIENT_GetSDKVersion();
+        DWORD playerVersion = PLAY_GetSdkVersion();
+        LLOG_INFO(logger, "Succeed to initialize dahua nvr sdk, sdk version is {}, player version is {}", sdkVersion, playerVersion);
 
         // 设置断线重连
         CLIENT_SetAutoReconnect(SdkHolder::pfHaveReConnect, 0);
@@ -66,27 +90,27 @@ public:
 
         // 设置响应超时时间5s，尝试连接次数3次
         int nWaitTime = 5000;
-        int nTryTime = 3;
+        int nTryTime  = 3;
         CLIENT_SetConnectTime(nWaitTime, nTryTime);
 
         LOG_SET_PRINT_INFO logInfo;
-        logInfo.dwSize = sizeof(LOG_SET_PRINT_INFO);
+        logInfo.dwSize            = sizeof(LOG_SET_PRINT_INFO);
         logInfo.bSetPrintStrategy = true;
-        logInfo.nPrintStrategy = 0;
-        logInfo.bSetFilePath = true;
+        logInfo.nPrintStrategy    = 0;
+        logInfo.bSetFilePath      = true;
         strcpy(logInfo.szLogFilePath, "/var/log/");
         logInfo.cbSDKLogCallBack = sdkLogCallBack;
         CLIENT_LogOpen(&logInfo);
 
         NET_PARAM param;
-        param.nWaittime = TIMEOUT;
-        param.nGetDevInfoTime = TIMEOUT;
+        param.nWaittime         = TIMEOUT;
+        param.nGetDevInfoTime   = TIMEOUT;
         param.nSearchRecordTime = TIMEOUT;
         CLIENT_SetNetworkParam(&param);
     }
 
     ~SdkHolder() {
-        //CLIENT_LogClose();
+        // CLIENT_LogClose();
         CLIENT_Cleanup();
     }
 
@@ -98,65 +122,61 @@ public:
         LLOG_INFO(logger, "Device {}:{} reconnect succeed", pchDVRIP, nDVRPort);
     }
 
-    static int CALLBACK sdkLogCallBack(const char *szLogBuffer, unsigned int nLogSize, LDWORD dwUser) {
-    }
+    static int CALLBACK sdkLogCallBack(const char *szLogBuffer, unsigned int nLogSize, LDWORD dwUser) {}
 
-    static void CALLBACK subDisConnect(EM_INTERFACE_TYPE emInterfaceType, BOOL bOnline, LLONG lOperateHandle,
-                                       LLONG lLoginID, LDWORD dwUser) {
+    static void CALLBACK subDisConnect(EM_INTERFACE_TYPE emInterfaceType, BOOL bOnline, LLONG lOperateHandle, LLONG lLoginID, LDWORD dwUser) {
         LLOG_INFO(logger, "Sub connection disconnect, {}-{}-{}", (int)emInterfaceType, bOnline, lLoginID);
     }
 };
 
 static void toTimePoint(TimePoint &tp, const NET_TIME &tm) {
-    tp.year = tm.dwYear;
-    tp.month = tm.dwMonth;
-    tp.day = tm.dwDay;
-    tp.hour = tm.dwHour;
+    tp.year   = tm.dwYear;
+    tp.month  = tm.dwMonth;
+    tp.day    = tm.dwDay;
+    tp.hour   = tm.dwHour;
     tp.minute = tm.dwMinute;
     tp.second = tm.dwSecond;
 }
 
 static void fromTimePoint(const TimePoint &tp, NET_TIME &tm) {
-    tm.dwYear = tp.year;
-    tm.dwMonth = tp.month;
-    tm.dwDay = tp.day;
-    tm.dwHour = tp.hour;
+    tm.dwYear   = tp.year;
+    tm.dwMonth  = tp.month;
+    tm.dwDay    = tp.day;
+    tm.dwHour   = tp.hour;
     tm.dwMinute = tp.minute;
     tm.dwSecond = tp.second;
 }
 
 static std::string netTimeToString(const NET_TIME_EX &tm) {
-    char t[128] = { 0 };
-    snprintf(t, sizeof(t) - 1, "%04d-%02d-%02d %02d:%02d:%02d", tm.dwYear, tm.dwMonth, tm.dwDay, tm.dwHour, tm.dwMinute,
-             tm.dwSecond);
+    char t[128] = {0};
+    snprintf(t, sizeof(t) - 1, "%04d-%02d-%02d %02d:%02d:%02d", tm.dwYear, tm.dwMonth, tm.dwDay, tm.dwHour, tm.dwMinute, tm.dwSecond);
     return std::string(t);
 }
 
 static std::string netTimeToString(const NET_TIME &tm) {
-    char t[128] = { 0 };
-    snprintf(t, sizeof(t) - 1, "%04d-%02d-%02d %02d:%02d:%02d", tm.dwYear, tm.dwMonth, tm.dwDay, tm.dwHour, tm.dwMinute,
-             tm.dwSecond);
+    char t[128] = {0};
+    snprintf(t, sizeof(t) - 1, "%04d-%02d-%02d %02d:%02d:%02d", tm.dwYear, tm.dwMonth, tm.dwDay, tm.dwHour, tm.dwMinute, tm.dwSecond);
     return std::string(t);
 }
 
 static std::vector<int32_t> parseBoundingBox(const DH_RECT &box, int32_t width, int32_t height) {
-    DH_RECT dstRect = { 0 };
+    DH_RECT dstRect = {0};
 
-    dstRect.left = ceil((double)(width  * box.left) / 8192);
-    dstRect.right = ceil((double)(width  * box.right) / 8192);
+    dstRect.left   = ceil((double)(width * box.left) / 8192);
+    dstRect.right  = ceil((double)(width * box.right) / 8192);
     dstRect.bottom = ceil((double)(height * box.bottom) / 8192);
-    dstRect.top = ceil((double)(height * box.top) / 8192);
+    dstRect.top    = ceil((double)(height * box.top) / 8192);
 
     int x = dstRect.left;
     int y = dstRect.top;
     int w = dstRect.right - dstRect.left;
     int h = dstRect.bottom - dstRect.top;
 
-    return std::vector<int32_t> {x, y, w, h};
+    return std::vector<int32_t>{x, y, w, h};
 }
 
 SdkStubImpl::SdkStubImpl() : SdkStub("dahuanvr", "Dahua net sdk", 37777) {
-    //init singleton
+    // init singleton
     channelNum_ = 0;
     Singleton<SdkHolder>::getInstance();
 }
@@ -169,10 +189,10 @@ SdkStubImpl::~SdkStubImpl() {
 int32_t SdkStubImpl::Login(const std::string &ip, const std::string &user, const std::string &password) {
     ip_ = ip;
 
-    int ret = 0;
-    NET_DEVICEINFO_Ex devInfo = { 0 };
-    handle_ = CLIENT_LoginEx2(ip.c_str(), GetPort(), user.c_str(), password.c_str(), EM_LOGIN_SPEC_CAP_TCP, NULL, &devInfo,
-                              &ret);
+    int ret                   = 0;
+    NET_DEVICEINFO_Ex devInfo = {0};
+
+    handle_ = CLIENT_LoginEx2(ip.c_str(), GetPort(), user.c_str(), password.c_str(), EM_LOGIN_SPEC_CAP_TCP, NULL, &devInfo, &ret);
     if (0 == handle_) {
         STUB_LLOG_ERROR("Failed to login {}, ret {}", ip, ret);
         return ret;
@@ -202,7 +222,7 @@ int32_t SdkStubImpl::QueryDevice(std::vector<Device> &devices) {
     pInParam->dwSize = sizeof(DH_IN_MATRIX_GET_CAMERAS);
 
     std::unique_ptr<DH_OUT_MATRIX_GET_CAMERAS> pOutParam(new DH_OUT_MATRIX_GET_CAMERAS());
-    pOutParam->dwSize = sizeof(DH_OUT_MATRIX_GET_CAMERAS);
+    pOutParam->dwSize          = sizeof(DH_OUT_MATRIX_GET_CAMERAS);
     pOutParam->nMaxCameraCount = channelNum_;
     std::unique_ptr<DH_MATRIX_CAMERA_INFO[]> cameras(new DH_MATRIX_CAMERA_INFO[channelNum_]);
 
@@ -212,27 +232,26 @@ int32_t SdkStubImpl::QueryDevice(std::vector<Device> &devices) {
     }
 
     for (int i = 0; i < channelNum_; i++) {
-        pOutParam->pstuCameras[i].dwSize = sizeof(DH_MATRIX_CAMERA_INFO);
+        pOutParam->pstuCameras[i].dwSize                 = sizeof(DH_MATRIX_CAMERA_INFO);
         pOutParam->pstuCameras[i].stuRemoteDevice.dwSize = sizeof(DH_REMOTE_DEVICE);
     }
 
     if (TRUE == CLIENT_MatrixGetCameras(handle_, pInParam.get(), pOutParam.get(), TIMEOUT)) {
         for (int i = 0; i < pOutParam->nMaxCameraCount; i++) {
             std::unique_ptr<NET_IN_GET_CAMERA_STATEINFO> pCameraStateInBuf(new NET_IN_GET_CAMERA_STATEINFO());
-            pCameraStateInBuf->dwSize = sizeof(NET_IN_GET_CAMERA_STATEINFO);
-            pCameraStateInBuf->bGetAllFlag = FALSE;
-            pCameraStateInBuf->nValidNum = 1;
+            pCameraStateInBuf->dwSize       = sizeof(NET_IN_GET_CAMERA_STATEINFO);
+            pCameraStateInBuf->bGetAllFlag  = FALSE;
+            pCameraStateInBuf->nValidNum    = 1;
             pCameraStateInBuf->nChannels[0] = i;
 
             std::unique_ptr<NET_OUT_GET_CAMERA_STATEINFO> pCameraStateOutBuf(new NET_OUT_GET_CAMERA_STATEINFO());
-            pCameraStateOutBuf->dwSize = sizeof(NET_OUT_GET_CAMERA_STATEINFO);
-            pCameraStateOutBuf->nMaxNum = 1;
-            NET_CAMERA_STATE_INFO cameraStateInfo = { 0 };
-            pCameraStateOutBuf->pCameraStateInfo = &cameraStateInfo;
+            pCameraStateOutBuf->dwSize            = sizeof(NET_OUT_GET_CAMERA_STATEINFO);
+            pCameraStateOutBuf->nMaxNum           = 1;
+            NET_CAMERA_STATE_INFO cameraStateInfo = {0};
+            pCameraStateOutBuf->pCameraStateInfo  = &cameraStateInfo;
             memset(pCameraStateOutBuf->pCameraStateInfo, 0, sizeof(NET_CAMERA_STATE_INFO));
 
-            CHECK(CLIENT_QueryDevInfo(handle_, NET_QUERY_GET_CAMERA_STATE, pCameraStateInBuf.get(), pCameraStateOutBuf.get(),
-                                      nullptr, TIMEOUT),
+            CHECK(CLIENT_QueryDevInfo(handle_, NET_QUERY_GET_CAMERA_STATE, pCameraStateInBuf.get(), pCameraStateOutBuf.get(), nullptr, TIMEOUT),
                   "Query device info");
             if (EM_CAMERA_STATE_TYPE_CONNECTED != pCameraStateOutBuf->pCameraStateInfo->emConnectionState) {
                 LLOG_WARN(logger, "The channel {} has not connected, ignore it", i);
@@ -242,14 +261,14 @@ int32_t SdkStubImpl::QueryDevice(std::vector<Device> &devices) {
             std::unique_ptr<NET_ENCODE_CHANNELTITLE_INFO> pChlInfo(new NET_ENCODE_CHANNELTITLE_INFO());
             memset(pChlInfo.get(), 0, sizeof(NET_ENCODE_CHANNELTITLE_INFO));
             pChlInfo->dwSize = sizeof(NET_ENCODE_CHANNELTITLE_INFO);
-            CHECK(CLIENT_GetConfig(handle_, NET_EM_CFG_ENCODE_CHANNELTITLE, pOutParam->pstuCameras[i].nUniqueChannel,
-                                   pChlInfo.get(),
-                                   sizeof(NET_ENCODE_CHANNELTITLE_INFO)), "CLIENT_GetConfig NET_EM_CFG_ENCODE_CHANNELTITLE");
+            CHECK(CLIENT_GetConfig(handle_, NET_EM_CFG_ENCODE_CHANNELTITLE, pOutParam->pstuCameras[i].nUniqueChannel, pChlInfo.get(),
+                                   sizeof(NET_ENCODE_CHANNELTITLE_INFO)),
+                  "CLIENT_GetConfig NET_EM_CFG_ENCODE_CHANNELTITLE");
 
             Device dev;
-            dev.id = std::to_string(pOutParam->pstuCameras[i].nUniqueChannel);
+            dev.id   = std::to_string(pOutParam->pstuCameras[i].nUniqueChannel);
             dev.name = pChlInfo->szChannelName;
-            dev.ip = pOutParam->pstuCameras[i].stuRemoteDevice.szIp;
+            dev.ip   = pOutParam->pstuCameras[i].stuRemoteDevice.szIp;
             STUB_LLOG_INFO("Found channel, id={}, name={}, ip={}", dev.id, dev.name, dev.ip);
 
             devices.push_back(dev);
@@ -257,9 +276,9 @@ int32_t SdkStubImpl::QueryDevice(std::vector<Device> &devices) {
     } else {
         for (int i = 0; i < channelNum_; i++) {
             Device dev;
-            dev.id = std::to_string(i);
+            dev.id   = std::to_string(i);
             dev.name = "Channel_" + dev.id;
-            dev.ip = ip_;
+            dev.ip   = ip_;
             STUB_LLOG_INFO("Found channel, id={}, name={}, ip={}", dev.id, dev.name, dev.ip);
 
             devices.push_back(dev);
@@ -274,27 +293,32 @@ int32_t SdkStubImpl::QueryDevice(std::vector<Device> &devices) {
 typedef struct tagRealPlayInfo : public CallbackClosure {
     LLONG playHandle;
     SdkStub::OnRealPlayData fn;
+    bool stop;
 
     tagRealPlayInfo() {
         playHandle = -1;
-        fn = nullptr;
+        fn         = nullptr;
+        stop       = false;
     }
 } RealPlayContext;
 
-void CALLBACK previewDataCallback(LLONG lRealHandle, DWORD dwDataType, BYTE *pBuffer, DWORD dwBufSize, LONG param,
-                                  LDWORD dwUser) {
+void CALLBACK previewDataCallback(LLONG lRealHandle, DWORD dwDataType, BYTE *pBuffer, DWORD dwBufSize, LONG param, LDWORD dwUser) {
     RealPlayContext *context = (RealPlayContext *)dwUser;
     if (nullptr == context || nullptr == context->fn) {
         return;
     }
+
+    if (context->stop) {
+        return;
+    }
+
     context->fn(lRealHandle, pBuffer, dwBufSize);
 }
 
 int32_t SdkStubImpl::StartRealStream(const std::string &devId, OnRealPlayData onData, intptr_t &jobId) {
     std::unique_ptr<RealPlayContext> context(new RealPlayContext());
 
-    LLONG playHandle = CLIENT_StartRealPlay(handle_, atoi(devId.c_str()), 0, DH_RType_Realplay, previewDataCallback,
-                                            nullptr, (LDWORD)context.get());
+    LLONG playHandle = CLIENT_StartRealPlay(handle_, atoi(devId.c_str()), 0, DH_RType_Realplay, previewDataCallback, nullptr, (LDWORD)context.get());
     if (playHandle < 0) {
         int ret = lastError();
         STUB_LLOG_ERROR("NET_DVR_RealPlay_V40 error, ret = {}", ret);
@@ -302,17 +326,19 @@ int32_t SdkStubImpl::StartRealStream(const std::string &devId, OnRealPlayData on
     }
 
     context->playHandle = playHandle;
-    context->thisClass = this;
-    jobId = (intptr_t)context.get();
+    context->thisClass  = this;
+    jobId               = (intptr_t)context.get();
+
     context.release();
 
     return 0;
 }
 
 int32_t SdkStubImpl::StopRealStream(intptr_t &jobId) {
-    std::unique_ptr<RealPlayContext> context((RealPlayContext *)jobId); //auto delete
+    std::unique_ptr<RealPlayContext> context((RealPlayContext *)jobId); // auto delete
 
     if (context->playHandle >= 0) {
+        context->stop = true;
         CLIENT_StopRealPlay(context->playHandle);
     }
 
@@ -321,10 +347,9 @@ int32_t SdkStubImpl::StopRealStream(intptr_t &jobId) {
     return 0;
 }
 
-int32_t SdkStubImpl::QueryRecord(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime,
-                                 std::vector<RecordInfo> &records) {
+int32_t SdkStubImpl::QueryRecord(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime, std::vector<RecordInfo> &records) {
     const uint32_t recordMaxCount = 1000;
-    int32_t recordCount = 0;
+    int32_t recordCount           = 0;
     std::unique_ptr<NET_RECORDFILE_INFO[]> recordInfos(new NET_RECORDFILE_INFO[recordMaxCount]);
 
     LLOG_INFO(logger, "Start query record for device {}, {}-{}", devId, startTime.ToString(), endTime.ToString());
@@ -333,7 +358,8 @@ int32_t SdkStubImpl::QueryRecord(const std::string &devId, const TimePoint &star
     fromTimePoint(startTime, tmStart);
     fromTimePoint(endTime, tmEnd);
     CHECK(CLIENT_QueryRecordFile(handle_, atoi(devId.c_str()), 0, &tmStart, &tmEnd, nullptr, recordInfos.get(),
-                                 recordMaxCount * sizeof(NET_RECORDFILE_INFO), &recordCount, TIMEOUT), "Query record");
+                                 recordMaxCount * sizeof(NET_RECORDFILE_INFO), &recordCount, TIMEOUT),
+          "CLIENT_QueryRecordFile");
     for (int32_t i = 0; i < recordCount; i++) {
         sdkproxy::sdk::RecordInfo r;
         r.fileName = recordInfos[i].filename;
@@ -348,34 +374,45 @@ int32_t SdkStubImpl::QueryRecord(const std::string &devId, const TimePoint &star
     return 0;
 }
 
-//playback closure
+// playback closure
 typedef struct tagPlaybackInfo : public CallbackClosure {
     intptr_t downloadId;
     SdkStub::OnDownloadData fn;
+    LONG playPort;
+    bool stop;
 
     tagPlaybackInfo() {
         downloadId = -1;
-        fn = nullptr;
-        thisClass = nullptr;
+        fn         = nullptr;
+        thisClass  = nullptr;
+        playPort   = -1;
+        stop       = false;
     }
 } PlaybackContext;
 
-static void timeDownLoadPos(LLONG lPlayHandle, DWORD dwTotalSize, DWORD dwDownLoadSize, int index,
-                            NET_RECORDFILE_INFO recordfileinfo,
-                            LDWORD dwUser) {
+static std::map<LONG, PlaybackContext *> transformContextMapping;
+
+static void timeDownLoadPos(LLONG lPlayHandle, DWORD dwTotalSize, DWORD dwDownLoadSize, int index, NET_RECORDFILE_INFO recordfileinfo, LDWORD dwUser) {
     SdkStubImpl *thisClass = (SdkStubImpl *)((CallbackClosure *)dwUser)->thisClass;
-    thisClass->TimeDownLoadPosCallback(lPlayHandle, dwTotalSize, dwDownLoadSize, index, (void *)&recordfileinfo, dwUser);
+    thisClass->TimeDownLoadPosCallback(lPlayHandle, dwTotalSize, dwDownLoadSize, dwUser);
 }
 
-void SdkStubImpl::TimeDownLoadPosCallback(intptr_t handle, int64_t totalSize, int64_t downLoadSize, int32_t index,
-        void *recordfileinfo,
-        uintptr_t userData) {
+void SdkStubImpl::TimeDownLoadPosCallback(intptr_t handle, int64_t totalSize, int64_t downLoadSize, uintptr_t userData) {
     PlaybackContext *context = (PlaybackContext *)userData;
     if (nullptr == context) {
         return;
     }
 
+    // 如果已经停止，直接返回
+    if (context->stop) {
+        return;
+    }
+
     if (((int32_t)downLoadSize) <= 0) {
+        //等待转封装完成
+        while ((PLAY_GetBufferValue(context->playPort, BUF_VIDEO_RENDER) + PLAY_GetSourceBufferRemain(context->playPort)) > 0) {
+            usleep(5);
+        }
         STUB_LLOG_INFO("Record download 100%, downloadId {}", handle);
         context->fn(handle, nullptr, -1);
     }
@@ -386,43 +423,72 @@ static int downloadDataCallBack(LLONG lRealHandle, DWORD dwDataType, BYTE *pBuff
     if (nullptr == context) {
         return 0;
     }
-
-    switch (dwDataType) {
-    case 0:
-        context->fn(lRealHandle, pBuffer, dwBufSize);
-        break;
-    default:
-        break;
+    if (context->stop) {
+        return 0;
     }
+
+    if (dwDataType == 0) {
+        // 视频流输入player，转格式
+        PLAY_InputData(context->playPort, pBuffer, dwBufSize);
+    }
+
     return 0;
 }
 
-int32_t SdkStubImpl::DownloadRecordByTime(const std::string &devId, const TimePoint &startTime,
-        const TimePoint &endTime, OnDownloadData onData, intptr_t &jobId) {
-    //new context
+static void recordDataCBFun(LONG nPort, unsigned char *pData, int nDataLen, LONGLONG nOffset, void *pUserData) {
+    if (nullptr == pData || nDataLen == 0) {
+        return;
+    }
+
+    if (transformContextMapping.find(nPort) == transformContextMapping.end()) {
+        return;
+    }
+
+    PlaybackContext *context = transformContextMapping[nPort];
+    context->fn(nPort, pData, nDataLen);
+}
+
+int32_t SdkStubImpl::DownloadRecordByTime(const std::string &devId, const TimePoint &startTime, const TimePoint &endTime, OnDownloadData onData,
+                                          intptr_t &jobId) {
+    // new context
     std::unique_ptr<PlaybackContext> context(new PlaybackContext());
-    context->fn = onData;
+    context->fn        = onData;
     context->thisClass = this;
+
+    //申请空闲的port用于视频格式转换，把大华的dav格式转成标准的TS格式
+    LONG port = 0;
+    PLAYER_CHECK(PLAY_GetFreePort(&port), "PLAY_GetFreePort");
+    const int SOURCEBUF_SIZE = (500 * 1024);
+    PLAYER_CHECK(PLAY_SetStreamOpenMode(port, STREAME_REALTIME), "PLAY_SetStreamOpenMode");
+    PLAYER_CHECK(PLAY_OpenStream(port, NULL, 0, SOURCEBUF_SIZE), "PLAY_OpenStream");
+    PLAYER_CHECK(PLAY_Play(port, NULL), "PLAY_Play");
+    PLAYER_CHECK(PLAY_StartDataRecordEx(port, nullptr, DATA_RECORD_TS, recordDataCBFun, (void *)context.get()), "PLAY_StartDataRecordEx");
+
+    context->playPort = port;
 
     // download by time
     NET_TIME tmStart, tmEnd;
     fromTimePoint(startTime, tmStart);
     fromTimePoint(endTime, tmEnd);
-    context->downloadId = CLIENT_DownloadByTimeEx(handle_, atoi(devId.c_str()), 0,
-                          &tmStart, &tmEnd, nullptr,
-                          timeDownLoadPos, (LDWORD)context.get(),
-                          downloadDataCallBack, (LDWORD)context.get());
+    context->downloadId = CLIENT_DownloadByTimeEx(handle_, atoi(devId.c_str()), 0, &tmStart, &tmEnd, nullptr, timeDownLoadPos, (LDWORD)context.get(),
+                                                  downloadDataCallBack, (LDWORD)context.get());
     if (0 == context->downloadId) {
         DWORD err = lastError();
         STUB_LLOG_ERROR("CLIENT_DownloadByTimeEx error {}", err);
+        PLAY_CloseStream(context->playPort);
+        PLAY_StopDataRecord(context->playPort);
+        PLAY_Stop(context->playPort);
+        PLAY_ReleasePort(context->playPort);
         return err;
     }
 
-    STUB_LLOG_INFO("Downloading file for dev {} between {} and {}, downloadId {}", devId, startTime.ToString(),
-                   endTime.ToString(), context->downloadId);
+    STUB_LLOG_INFO("Start download file for dev {} between {} and {}, downloadId {}", devId, startTime.ToString(), endTime.ToString(),
+                   context->downloadId);
+
+    transformContextMapping[port] = context.get();
 
     jobId = (intptr_t)context.get();
-    context.release();  // 释放控制权
+    context.release(); // 释放控制权
 
     return 0;
 }
@@ -430,14 +496,24 @@ int32_t SdkStubImpl::DownloadRecordByTime(const std::string &devId, const TimePo
 int32_t SdkStubImpl::StopDownloadRecord(intptr_t &jobId) {
     std::unique_ptr<PlaybackContext> context((PlaybackContext *)jobId); // auto delete
     if (nullptr != context) {
+        context->stop = true;
+
         STUB_LLOG_INFO("Stop download file, downloadId {}", context->downloadId);
+
         CHECK(CLIENT_StopDownload(context->downloadId), "CLIENT_StopDownload");
+        if (context->playPort > 0) {
+            transformContextMapping.erase(context->playPort);
+            PLAY_CloseStream(context->playPort);
+            PLAY_StopDataRecord(context->playPort);
+            PLAY_Stop(context->playPort);
+            PLAY_ReleasePort(context->playPort);
+        }
         jobId = 0;
     }
     return 0;
 }
 
-//playback closure
+// playback closure
 typedef struct tagEventAnalyzeContext : public CallbackClosure {
     intptr_t analyzeId;
     intptr_t videoStatHandle;
@@ -446,11 +522,11 @@ typedef struct tagEventAnalyzeContext : public CallbackClosure {
     void *userData;
 
     tagEventAnalyzeContext() {
-        analyzeId = -1;
-        videoStatHandle = -1;
+        analyzeId          = -1;
+        videoStatHandle    = -1;
         startServiceHandle = -1;
-        fn = nullptr;
-        thisClass = nullptr;
+        fn                 = nullptr;
+        thisClass          = nullptr;
     }
 } EventAnalyzeContext;
 
@@ -474,97 +550,81 @@ inline static std::string vehicleSizeToString(const int v) {
     return strType;
 }
 
-
 typedef std::map<std::string, int32_t> TypeMapping;
 
 static const TypeMapping plateColorMapping = {
-    {"Unknown", 999},
-    {"Yellow", 1},
-    {"Blue", 2},
-    {"Black", 3},
-    {"White", 4},
+    {"Unknown", 999}, {"Yellow", 1}, {"Blue", 2}, {"Black", 3}, {"White", 4},
 };
 
-static const TypeMapping platTypeMapping = {
-    {"Unknown", 99},
-    {"Normal", 2},
-    {"YellowPlate", 1},
-    {"DoubleYellow", 1},
-    {"Police", 23},
-    {"Armed", 32},
-    {"Military", 32},
-    {"DoubleMilitary", 32},
-    {"SpecialAdministrativeRegion", 26},
-    {"Trainning", 16},
-    {"Personal", 99},
-    {"Agri", 99},
-    {"Embassy", 3},
-    {"Moto", 99},
-    {"Tractor", 99},
-    {"OfficialCar", 99},
-    {"PersonalCar", 99},
-    {"WarCar", 32},
-    {"Other", 99},
-    {"CivilAviation", 99},
-    {"Black", 99},
-    {"PureNewEnergyMicroCar", 99},
-    {"MixedNewEnergyMicroCar", 99},
-    {"PureNewEnergyLargeCar", 99},
-    {"MixedNewEnergyLargeCar", 99}
-};
+static const TypeMapping platTypeMapping = {{"Unknown", 99},
+                                            {"Normal", 2},
+                                            {"YellowPlate", 1},
+                                            {"DoubleYellow", 1},
+                                            {"Police", 23},
+                                            {"Armed", 32},
+                                            {"Military", 32},
+                                            {"DoubleMilitary", 32},
+                                            {"SpecialAdministrativeRegion", 26},
+                                            {"Trainning", 16},
+                                            {"Personal", 99},
+                                            {"Agri", 99},
+                                            {"Embassy", 3},
+                                            {"Moto", 99},
+                                            {"Tractor", 99},
+                                            {"OfficialCar", 99},
+                                            {"PersonalCar", 99},
+                                            {"WarCar", 32},
+                                            {"Other", 99},
+                                            {"CivilAviation", 99},
+                                            {"Black", 99},
+                                            {"PureNewEnergyMicroCar", 99},
+                                            {"MixedNewEnergyMicroCar", 99},
+                                            {"PureNewEnergyLargeCar", 99},
+                                            {"MixedNewEnergyLargeCar", 99}};
 
 static const TypeMapping vehicleColorMapping = {
-    {"Unknown", 999},
-    {"Yellow", 8},
-    {"Blue", 2},
-    {"Black", 1},
-    {"White", 6},
-    {"Red", 7},
-    {"Gray", 12},
-    {"Green", 4},
+    {"Unknown", 999}, {"Yellow", 8}, {"Blue", 2}, {"Black", 1}, {"White", 6}, {"Red", 7}, {"Gray", 12}, {"Green", 4},
 };
 
-static const TypeMapping vehicleTypeMapping = {
-    {"Unknown", 0},
-    {"Motor", 3},
-    {"Non-Motor", 3},
-    {"Bus", 6},
-    {"Bicycle", 2},
-    {"Motorcycle", 3},
-    {"UnlicensedMotor", 3},
-    {"LargeCar", 8},
-    {"MicroCar", 4},
-    {"EmbassyCar", 4},
-    {"MarginalCar", 4},
-    {"AreaoutCar", 4},
-    {"ForeignCar", 4},
-    {"DualTriWheelMotorcycle", 5},
-    {"LightMotorcycle", 3},
-    {"EmbassyMotorcycle", 3},
-    {"MarginalMotorcycle", 3},
-    {"AreaoutMotorcycle", 3},
-    {"ForeignMotorcycle", 3},
-    {"FarmTransmitCar", 4},
-    {"Tractor", 0 },
-    {"Trailer", 8},
-    {"CoachCar", 4},
-    {"CoachMotorcycle", 3},
-    {"TrialCar", 4},
-    {"TrialMotorcycle", 3},
-    {"TemporaryEntryCar", 4},
-    {"TemporaryEntryMotorcycle", 3},
-    {"TemporarySteerCar", 4},
-    {"PassengerCar", 4},
-    {"LargeTruck", 8},
-    {"MidTruck", 8},
-    {"SaloonCar", 4},
-    {"Microbus", 7},
-    {"MicroTruck", 8},
-    {"Tricycle", 5},
-    {"Passerby", 1}
-};
+static const TypeMapping vehicleTypeMapping = {{"Unknown", 0},
+                                               {"Motor", 3},
+                                               {"Non-Motor", 3},
+                                               {"Bus", 6},
+                                               {"Bicycle", 2},
+                                               {"Motorcycle", 3},
+                                               {"UnlicensedMotor", 3},
+                                               {"LargeCar", 8},
+                                               {"MicroCar", 4},
+                                               {"EmbassyCar", 4},
+                                               {"MarginalCar", 4},
+                                               {"AreaoutCar", 4},
+                                               {"ForeignCar", 4},
+                                               {"DualTriWheelMotorcycle", 5},
+                                               {"LightMotorcycle", 3},
+                                               {"EmbassyMotorcycle", 3},
+                                               {"MarginalMotorcycle", 3},
+                                               {"AreaoutMotorcycle", 3},
+                                               {"ForeignMotorcycle", 3},
+                                               {"FarmTransmitCar", 4},
+                                               {"Tractor", 0},
+                                               {"Trailer", 8},
+                                               {"CoachCar", 4},
+                                               {"CoachMotorcycle", 3},
+                                               {"TrialCar", 4},
+                                               {"TrialMotorcycle", 3},
+                                               {"TemporaryEntryCar", 4},
+                                               {"TemporaryEntryMotorcycle", 3},
+                                               {"TemporarySteerCar", 4},
+                                               {"PassengerCar", 4},
+                                               {"LargeTruck", 8},
+                                               {"MidTruck", 8},
+                                               {"SaloonCar", 4},
+                                               {"Microbus", 7},
+                                               {"MicroTruck", 8},
+                                               {"Tricycle", 5},
+                                               {"Passerby", 1}};
 
-static int32_t mappingConvert(const TypeMapping &m, const std::string &key)  {
+static int32_t mappingConvert(const TypeMapping &m, const std::string &key) {
     int32_t v = 0;
     if (m.find(key) != m.end()) {
         v = m.at(key);
@@ -574,14 +634,13 @@ static int32_t mappingConvert(const TypeMapping &m, const std::string &key)  {
     return v;
 }
 
-static BOOL analyzerDataCallBack(LLONG lAnalyzerHandle, DWORD dwAlarmType, void *pAlarmInfo, BYTE *pBuffer,
-                                 DWORD dwBufSize, LDWORD dwUser, int nSequence, void *reserved) {
+static BOOL analyzerDataCallBack(LLONG lAnalyzerHandle, DWORD dwAlarmType, void *pAlarmInfo, BYTE *pBuffer, DWORD dwBufSize, LDWORD dwUser,
+                                 int nSequence, void *reserved) {
     SdkStubImpl *thisClass = (SdkStubImpl *)((CallbackClosure *)dwUser)->thisClass;
     return thisClass->AnalyzerDataCallBack(lAnalyzerHandle, dwAlarmType, pAlarmInfo, pBuffer, dwBufSize, dwUser);
 }
 
-bool SdkStubImpl::AnalyzerDataCallBack(intptr_t handle, int64_t alarmType, void *alarmInfo, uint8_t *buffer,
-                                       int64_t bufSize, intptr_t userData) {
+bool SdkStubImpl::AnalyzerDataCallBack(intptr_t handle, int64_t alarmType, void *alarmInfo, uint8_t *buffer, int64_t bufSize, intptr_t userData) {
     EventAnalyzeContext *context = (EventAnalyzeContext *)userData;
     if (nullptr == context || nullptr == context->fn || nullptr == alarmInfo || nullptr == buffer) {
         return false;
@@ -600,26 +659,26 @@ bool SdkStubImpl::AnalyzerDataCallBack(intptr_t handle, int64_t alarmType, void 
         DEV_EVENT_TRAFFIC_PARKING_INFO &data = *((DEV_EVENT_TRAFFIC_PARKING_INFO *)alarmInfo);
 
         DH_RECT &rectBoundingBox = data.stuVehicle.BoundingBox;
-        long nWidth = data.stuResolution.snWidth;
-        long nHeight = data.stuResolution.snHight;
+        long nWidth              = data.stuResolution.snWidth;
+        long nHeight             = data.stuResolution.snHight;
         if ((nWidth <= 0) || (nHeight <= 0)) {
             return false;
         }
 
         IllegalParkingEvent event;
-        event.rect = parseBoundingBox(rectBoundingBox, nWidth, nHeight);
-        event.id = std::to_string(data.nEventID);
-        event.dateTime = netTimeToString(data.UTC);
-        event.plateNumber = data.stTrafficCar.szPlateNumber;
-        event.plateColor = std::to_string(mappingConvert(plateColorMapping, data.stTrafficCar.szPlateColor));
-        event.plateType = std::to_string(mappingConvert(platTypeMapping, data.stTrafficCar.szPlateType));
-        event.vehicleColor = std::to_string(mappingConvert(vehicleColorMapping, data.stTrafficCar.szVehicleColor));
-        event.vehicleType = std::to_string(mappingConvert(vehicleTypeMapping, data.stuVehicle.szObjectSubType));
-        event.vehicleSize = vehicleSizeToString(data.stTrafficCar.nVehicleSize);
-        event.lane = std::to_string(data.stTrafficCar.nLane);
-        event.imageGroupId = std::to_string(data.stuFileInfo.nGroupId);
-        event.imageIndex = data.stuFileInfo.bIndex;
-        event.imageCount = data.stuFileInfo.bCount;
+        event.rect          = parseBoundingBox(rectBoundingBox, nWidth, nHeight);
+        event.id            = std::to_string(data.nEventID);
+        event.dateTime      = netTimeToString(data.UTC);
+        event.plateNumber   = data.stTrafficCar.szPlateNumber;
+        event.plateColor    = std::to_string(mappingConvert(plateColorMapping, data.stTrafficCar.szPlateColor));
+        event.plateType     = std::to_string(mappingConvert(platTypeMapping, data.stTrafficCar.szPlateType));
+        event.vehicleColor  = std::to_string(mappingConvert(vehicleColorMapping, data.stTrafficCar.szVehicleColor));
+        event.vehicleType   = std::to_string(mappingConvert(vehicleTypeMapping, data.stuVehicle.szObjectSubType));
+        event.vehicleSize   = vehicleSizeToString(data.stTrafficCar.nVehicleSize);
+        event.lane          = std::to_string(data.stTrafficCar.nLane);
+        event.imageGroupId  = std::to_string(data.stuFileInfo.nGroupId);
+        event.imageIndex    = data.stuFileInfo.bIndex;
+        event.imageCount    = data.stuFileInfo.bCount;
         event.violationCode = data.stTrafficCar.szViolationCode;
         event.violationDesc = data.stTrafficCar.szViolationDesc;
 
@@ -654,19 +713,19 @@ bool SdkStubImpl::AnalyzerDataCallBack(intptr_t handle, int64_t alarmType, void 
         DEV_EVENT_TRAFFICJUNCTION_INFO &data = *((DEV_EVENT_TRAFFICJUNCTION_INFO *)alarmInfo);
 
         DH_RECT &rectBoundingBox = data.stuVehicle.BoundingBox;
-        long nWidth = data.stuResolution.snWidth;
-        long nHeight = data.stuResolution.snHight;
+        long nWidth              = data.stuResolution.snWidth;
+        long nHeight             = data.stuResolution.snHight;
         if ((nWidth <= 0) || (nHeight <= 0)) {
             return false;
         }
 
         VehicleCaptureEvent event;
-        event.rect = parseBoundingBox(rectBoundingBox, nWidth, nHeight);
-        event.plateNumber = data.stTrafficCar.szPlateNumber;
-        event.plateType = std::to_string(mappingConvert(platTypeMapping, data.stTrafficCar.szPlateType));
-        event.plateColor = std::to_string(mappingConvert(plateColorMapping, data.stTrafficCar.szPlateColor));
+        event.rect         = parseBoundingBox(rectBoundingBox, nWidth, nHeight);
+        event.plateNumber  = data.stTrafficCar.szPlateNumber;
+        event.plateType    = std::to_string(mappingConvert(platTypeMapping, data.stTrafficCar.szPlateType));
+        event.plateColor   = std::to_string(mappingConvert(plateColorMapping, data.stTrafficCar.szPlateColor));
         event.vehicleColor = std::to_string(mappingConvert(vehicleColorMapping, data.stTrafficCar.szVehicleColor));
-        event.vehicleType = std::to_string(mappingConvert(vehicleTypeMapping, data.stuVehicle.szObjectSubType));
+        event.vehicleType  = std::to_string(mappingConvert(vehicleTypeMapping, data.stuVehicle.szObjectSubType));
 
         //没有车牌号的，直接跳过
         if (event.plateNumber == "") {
@@ -680,26 +739,32 @@ bool SdkStubImpl::AnalyzerDataCallBack(intptr_t handle, int64_t alarmType, void 
         DEV_EVENT_TRAFFICGATE_INFO &data = *((DEV_EVENT_TRAFFICGATE_INFO *)alarmInfo);
 
         DH_RECT &rectBoundingBox = data.stuVehicle.BoundingBox;
-        long nWidth = data.stuResolution.snWidth;
-        long nHeight = data.stuResolution.snHight;
+        long nWidth              = data.stuResolution.snWidth;
+        long nHeight             = data.stuResolution.snHight;
         if ((nWidth <= 0) || (nHeight <= 0)) {
             return false;
         }
 
-//         VehicleCaptureEvent event;
-//         event.rect = parseBoundingBox(rectBoundingBox, nWidth, nHeight);
-//         event.plateNumber = data.stTrafficCar.szPlateNumber;
-//         event.plateType = std::to_string(mappingConvert(platTypeMapping, data.stuVehicle.ty));
-//         event.plateColor = std::to_string(mappingConvert(plateColorMapping, data.stTrafficCar.szPlateColor));
-//         event.vehicleColor = std::to_string(mappingConvert(vehicleColorMapping, data.stTrafficCar.szVehicleColor));
-//         event.vehicleType = std::to_string(mappingConvert(vehicleTypeMapping, data.stuVehicle.szObjectSubType));
+        //         VehicleCaptureEvent event;
+        //         event.rect = parseBoundingBox(rectBoundingBox, nWidth,
+        //         nHeight); event.plateNumber =
+        //         data.stTrafficCar.szPlateNumber; event.plateType =
+        //         std::to_string(mappingConvert(platTypeMapping,
+        //         data.stuVehicle.ty)); event.plateColor =
+        //         std::to_string(mappingConvert(plateColorMapping,
+        //         data.stTrafficCar.szPlateColor)); event.vehicleColor =
+        //         std::to_string(mappingConvert(vehicleColorMapping,
+        //         data.stTrafficCar.szVehicleColor)); event.vehicleType =
+        //         std::to_string(mappingConvert(vehicleTypeMapping,
+        //         data.stuVehicle.szObjectSubType));
 
-//         //没有车牌号的，直接跳过
-//         if (event.plateNumber == "") {
-//             break;
-//         }
-//
-//         context->fn(lAnalyzerHandle, AlarmEventType::VEHICLE_CAPTURE, ((json)event).dump(), pBuffer, dwBufSize, context->userData);
+        //         //没有车牌号的，直接跳过
+        //         if (event.plateNumber == "") {
+        //             break;
+        //         }
+        //
+        //         context->fn(lAnalyzerHandle, AlarmEventType::VEHICLE_CAPTURE,
+        //         ((json)event).dump(), pBuffer, dwBufSize, context->userData);
         break;
     }
     case EVENT_IVS_TRAFFIC_TOLLGATE: {
@@ -708,8 +773,8 @@ bool SdkStubImpl::AnalyzerDataCallBack(intptr_t handle, int64_t alarmType, void 
     case EVENT_IVS_ACCESS_CTL: {
         DEV_EVENT_ACCESS_CTL_INFO &data = *((DEV_EVENT_ACCESS_CTL_INFO *)alarmInfo);
         AcsEvent event;
-        event.dateTime = netTimeToString(data.UTC);
-        event.type = (int32_t)data.emEventType;
+        event.dateTime   = netTimeToString(data.UTC);
+        event.type       = (int32_t)data.emEventType;
         event.openMethod = data.emOpenMethod;
         break;
     }
@@ -717,7 +782,25 @@ bool SdkStubImpl::AnalyzerDataCallBack(intptr_t handle, int64_t alarmType, void 
         DEV_EVENT_GARBAGE_EXPOSURE_INFO &data = *((DEV_EVENT_GARBAGE_EXPOSURE_INFO *)alarmInfo);
         GarbageExposureEvent event;
         event.action = data.nAction;
-        context->fn(handle, AlarmEventType::GARBAGE_EXPOSURE, ((json)event).dump(), buffer, bufSize, context->userData);
+        //抓拍一张图片
+        uint32_t imgBufSize = 5 * 1024 * 1024;
+        std::unique_ptr<uint8_t[]> imgBuf(new uint8_t[imgBufSize]);
+        this->SnapPicture(std::to_string(data.nChannelID), imgBuf.get(), imgBufSize);
+        context->fn(handle, AlarmEventType::GARBAGE_EXPOSURE, ((json)event).dump(), imgBuf.get(), imgBufSize, context->userData);
+        break;
+    }
+    case EVENT_IVS_FACEDETECT: {
+        DEV_EVENT_FACEDETECT_INFO &data = *((DEV_EVENT_FACEDETECT_INFO *)alarmInfo);
+        //没有年龄信息的不要
+        if (data.nAge > 0) {
+            AgeRecognizeEvent event;
+            event.age = data.nAge;
+            //抓拍一张图片
+            uint32_t imgBufSize = 5 * 1024 * 1024;
+            std::unique_ptr<uint8_t[]> imgBuf(new uint8_t[imgBufSize]);
+            this->SnapPicture(std::to_string(data.nChannelID), imgBuf.get(), imgBufSize);
+            context->fn(handle, AlarmEventType::AGE_RECOGNIZE, ((json)event).dump(), imgBuf.get(), imgBufSize, context->userData);
+        }
         break;
     }
     default: {
@@ -744,30 +827,30 @@ void SdkStubImpl::VideoStatSumCallBack(uintptr_t handle, void *buffer, uint64_t 
     STUB_LLOG_INFO("[videoStatSumCallBack] Received video stat summary event");
 
     VisitorsFlowRateEvent info;
-    info.dateTime = netTimeToString(pBuf->stuTime);
-    info.ruleName = pBuf->szRuleName;
+    info.dateTime      = netTimeToString(pBuf->stuTime);
+    info.ruleName      = pBuf->szRuleName;
     info.inCount.total = pBuf->stuEnteredSubtotal.nTotal;
-    info.inCount.hour = pBuf->stuEnteredSubtotal.nHour;
+    info.inCount.hour  = pBuf->stuEnteredSubtotal.nHour;
     info.inCount.today = pBuf->stuEnteredSubtotal.nToday;
-    info.inCount.osd = pBuf->stuEnteredSubtotal.nOSD;
+    info.inCount.osd   = pBuf->stuEnteredSubtotal.nOSD;
 
     info.outCount.total = pBuf->stuExitedSubtotal.nTotal;
-    info.outCount.hour = pBuf->stuExitedSubtotal.nHour;
+    info.outCount.hour  = pBuf->stuExitedSubtotal.nHour;
     info.outCount.today = pBuf->stuExitedSubtotal.nToday;
-    info.outCount.osd = pBuf->stuExitedSubtotal.nOSD;
+    info.outCount.osd   = pBuf->stuExitedSubtotal.nOSD;
 
     context->fn(handle, AlarmEventType::VISITORS_FLOWRATE, ((json)info).dump(), nullptr, 0, context->userData);
 }
 
 static std::map<intptr_t, EventAnalyzeContext *> eventContextMapping;
 
-BOOL messageCallBack(LONG lCommand, LLONG lLoginID, char *pBuf, DWORD dwBufLen, char *pchDVRIP, LONG nDVRPort,
-                     BOOL bAlarmAckFlag, LONG nEventID, LDWORD dwUser) {
+BOOL messageCallBack(LONG lCommand, LLONG lLoginID, char *pBuf, DWORD dwBufLen, char *pchDVRIP, LONG nDVRPort, BOOL bAlarmAckFlag, LONG nEventID,
+                     LDWORD dwUser) {
     EventAnalyzeContext *context = nullptr;
 
     intptr_t handle = (intptr_t)lLoginID;
 
-    //double check
+    // double check
     if (eventContextMapping.find(handle) != eventContextMapping.end()) {
         if (eventContextMapping.find(handle) != eventContextMapping.end()) {
             context = eventContextMapping[handle];
@@ -783,7 +866,7 @@ BOOL messageCallBack(LONG lCommand, LLONG lLoginID, char *pBuf, DWORD dwBufLen, 
     return thisClass->MessageCallBack(lCommand, pBuf, dwBufLen, nEventID, (uintptr_t)context);
 }
 
-bool SdkStubImpl::MessageCallBack(uint64_t cmd, char *buffer, uint64_t bufSize,  uint64_t eventId, uintptr_t userData) {
+bool SdkStubImpl::MessageCallBack(uint64_t cmd, char *buffer, uint64_t bufSize, uint64_t eventId, uintptr_t userData) {
     EventAnalyzeContext *context = (EventAnalyzeContext *)userData;
     if (nullptr == context || nullptr == context->fn || nullptr == buffer) {
         return true;
@@ -797,51 +880,51 @@ bool SdkStubImpl::MessageCallBack(uint64_t cmd, char *buffer, uint64_t bufSize, 
     STUB_LLOG_INFO("[messageCallBack] Received message {}", cmd);
 
     switch (cmd) {
-//     // 门禁刷卡事件
-//     case DH_ALARM_ACCESS_CTL_EVENT: {
-//         ALARM_ACCESS_CTL_EVENT_INFO *pInfo = (ALARM_ACCESS_CTL_EVENT_INFO *)buffer;
-//         break;
-//     }
-//     case DH_ALARM_ACCESS_CTL_BREAK_IN: {
-//         ALARM_ACCESS_CTL_BREAK_IN_INFO *pInfo = (ALARM_ACCESS_CTL_BREAK_IN_INFO *)buffer;
-//         break;
-//     }
-//     case DH_ALARM_ACCESS_CTL_DURESS: {
-//         ALARM_ACCESS_CTL_DURESS_INFO *pInfo = (ALARM_ACCESS_CTL_DURESS_INFO *)buffer;
-//         break;
-//     }
-//     case DH_ALARM_ACCESS_CTL_NOT_CLOSE: {
-//         ALARM_ACCESS_CTL_NOT_CLOSE_INFO *pInfo = (ALARM_ACCESS_CTL_NOT_CLOSE_INFO *)buffer;
-//         break;
-//     }
-//     case DH_ALARM_ACCESS_CTL_REPEAT_ENTER: {
-//         ALARM_ACCESS_CTL_REPEAT_ENTER_INFO *pInfo = (ALARM_ACCESS_CTL_REPEAT_ENTER_INFO *)buffer;
-//         break;
-//     }
-//     case DH_ALARM_ACCESS_CTL_STATUS: {
-//         ALARM_ACCESS_CTL_STATUS_INFO *pInfo = (ALARM_ACCESS_CTL_STATUS_INFO *)buffer;
-//         break;
-//     }
-//     case DH_ALARM_CHASSISINTRUDED: {
-//         ALARM_CHASSISINTRUDED_INFO *pInfo = (ALARM_CHASSISINTRUDED_INFO *)buffer;
-//         break;
-//     }
-//     case DH_ALARM_OPENDOORGROUP: {
-//         ALARM_OPEN_DOOR_GROUP_INFO *pInfo = (ALARM_OPEN_DOOR_GROUP_INFO *)buffer;
-//         break;
-//     }
-//     case DH_ALARM_FINGER_PRINT: {
-//         ALARM_CAPTURE_FINGER_PRINT_INFO *pInfo = (ALARM_CAPTURE_FINGER_PRINT_INFO *)buffer;
-//         break;
-//     }
-//     case DH_ALARM_ALARM_EX2: {
-//         ALARM_ALARM_INFO_EX2 *pInfo = (ALARM_ALARM_INFO_EX2 *)buffer;
-//         break;
-//     }
-//     case DH_ALARM_TRAFFICSTROBESTATE: {
-//         ALARM_TRAFFICSTROBESTATE_INFO *pInfo = (ALARM_TRAFFICSTROBESTATE_INFO *)buffer;
-//         break;
-//     }
+        //     // 门禁刷卡事件
+        //     case DH_ALARM_ACCESS_CTL_EVENT: {
+        //         ALARM_ACCESS_CTL_EVENT_INFO *pInfo =
+        //         (ALARM_ACCESS_CTL_EVENT_INFO *)buffer; break;
+        //     }
+        //     case DH_ALARM_ACCESS_CTL_BREAK_IN: {
+        //         ALARM_ACCESS_CTL_BREAK_IN_INFO *pInfo =
+        //         (ALARM_ACCESS_CTL_BREAK_IN_INFO *)buffer; break;
+        //     }
+        //     case DH_ALARM_ACCESS_CTL_DURESS: {
+        //         ALARM_ACCESS_CTL_DURESS_INFO *pInfo =
+        //         (ALARM_ACCESS_CTL_DURESS_INFO *)buffer; break;
+        //     }
+        //     case DH_ALARM_ACCESS_CTL_NOT_CLOSE: {
+        //         ALARM_ACCESS_CTL_NOT_CLOSE_INFO *pInfo =
+        //         (ALARM_ACCESS_CTL_NOT_CLOSE_INFO *)buffer; break;
+        //     }
+        //     case DH_ALARM_ACCESS_CTL_REPEAT_ENTER: {
+        //         ALARM_ACCESS_CTL_REPEAT_ENTER_INFO *pInfo =
+        //         (ALARM_ACCESS_CTL_REPEAT_ENTER_INFO *)buffer; break;
+        //     }
+        //     case DH_ALARM_ACCESS_CTL_STATUS: {
+        //         ALARM_ACCESS_CTL_STATUS_INFO *pInfo =
+        //         (ALARM_ACCESS_CTL_STATUS_INFO *)buffer; break;
+        //     }
+        //     case DH_ALARM_CHASSISINTRUDED: {
+        //         ALARM_CHASSISINTRUDED_INFO *pInfo =
+        //         (ALARM_CHASSISINTRUDED_INFO *)buffer; break;
+        //     }
+        //     case DH_ALARM_OPENDOORGROUP: {
+        //         ALARM_OPEN_DOOR_GROUP_INFO *pInfo =
+        //         (ALARM_OPEN_DOOR_GROUP_INFO *)buffer; break;
+        //     }
+        //     case DH_ALARM_FINGER_PRINT: {
+        //         ALARM_CAPTURE_FINGER_PRINT_INFO *pInfo =
+        //         (ALARM_CAPTURE_FINGER_PRINT_INFO *)buffer; break;
+        //     }
+        //     case DH_ALARM_ALARM_EX2: {
+        //         ALARM_ALARM_INFO_EX2 *pInfo = (ALARM_ALARM_INFO_EX2
+        //         *)buffer; break;
+        //     }
+        //     case DH_ALARM_TRAFFICSTROBESTATE: {
+        //         ALARM_TRAFFICSTROBESTATE_INFO *pInfo =
+        //         (ALARM_TRAFFICSTROBESTATE_INFO *)buffer; break;
+        //     }
     case DH_ALARM_RIOTERDETECTION: {
         ALARM_RIOTERDETECTION_INFO *pInfo = (ALARM_RIOTERDETECTION_INFO *)buffer;
 
@@ -857,33 +940,30 @@ bool SdkStubImpl::MessageCallBack(uint64_t cmd, char *buffer, uint64_t bufSize, 
 
         break;
     }
-    default:
-        break;
+    default: break;
     }
 
     return true;
 }
 
-
-int32_t SdkStubImpl::StartEventAnalyze(const std::string &devId, OnAnalyzeData onData, void *userData,
-                                       intptr_t &jobId) {
-    std::unique_ptr< EventAnalyzeContext> context(new EventAnalyzeContext());
-    context->fn = onData;
+int32_t SdkStubImpl::StartEventAnalyze(const std::string &devId, OnAnalyzeData onData, void *userData, intptr_t &jobId) {
+    std::unique_ptr<EventAnalyzeContext> context(new EventAnalyzeContext());
+    context->fn        = onData;
     context->thisClass = this;
-    context->userData = userData;
-    context->analyzeId = CLIENT_RealLoadPictureEx(handle_, atoi(devId.c_str()), EVENT_IVS_ALL, true, analyzerDataCallBack,
-                         (LDWORD)context.get(), nullptr);
+    context->userData  = userData;
+    context->analyzeId =
+        CLIENT_RealLoadPictureEx(handle_, atoi(devId.c_str()), EVENT_IVS_ALL, true, analyzerDataCallBack, (LDWORD)context.get(), nullptr);
     if (context->analyzeId < 0) {
         int ret = lastError();
         STUB_LLOG_ERROR("CLIENT_RealLoadPictureEx error, ret = {}", ret);
         return ret;
     }
 
-    NET_IN_ATTACH_VIDEOSTAT_SUM videoStatIn = { 0 };
-    videoStatIn.nChannel = atoi(devId.c_str());
-    videoStatIn.cbVideoStatSum = videoStatSumCallBack;
-    NET_OUT_ATTACH_VIDEOSTAT_SUM videoStatOut = { 0 };
-    context->videoStatHandle = CLIENT_AttachVideoStatSummary(handle_, &videoStatIn, &videoStatOut, TIMEOUT);
+    NET_IN_ATTACH_VIDEOSTAT_SUM videoStatIn   = {0};
+    videoStatIn.nChannel                      = atoi(devId.c_str());
+    videoStatIn.cbVideoStatSum                = videoStatSumCallBack;
+    NET_OUT_ATTACH_VIDEOSTAT_SUM videoStatOut = {0};
+    context->videoStatHandle                  = CLIENT_AttachVideoStatSummary(handle_, &videoStatIn, &videoStatOut, TIMEOUT);
     if (context->videoStatHandle < 0) {
         int ret = lastError();
         STUB_LLOG_ERROR("CLIENT_AttachVideoStatSummary error, ret = {}", ret);
@@ -899,7 +979,7 @@ int32_t SdkStubImpl::StartEventAnalyze(const std::string &devId, OnAnalyzeData o
     eventContextMapping[this->handle_] = context.get();
 
     jobId = (intptr_t)context.get();
-    context.release();  // 释放控制权
+    context.release(); // 释放控制权
     return 0;
 }
 
@@ -923,19 +1003,19 @@ int32_t SdkStubImpl::StopEventAnalyze(intptr_t &jobId) {
 
 int32_t SdkStubImpl::SnapPicture(const std::string &devId, uint8_t *imgBuf, uint32_t &imgBufSize) {
     NET_IN_SNAP_PIC_TO_FILE_PARAM inParam = {0};
-    inParam.dwSize = sizeof(NET_IN_SNAP_PIC_TO_FILE_PARAM);
-    inParam.stuParam.Channel = atoi(devId.c_str());
-    inParam.stuParam.Channel = atoi(devId.c_str());
-    inParam.stuParam.Quality = 6;
-    inParam.stuParam.ImageSize = 2;
-    inParam.stuParam.mode = 0;
+    inParam.dwSize                        = sizeof(NET_IN_SNAP_PIC_TO_FILE_PARAM);
+    inParam.stuParam.Channel              = atoi(devId.c_str());
+    inParam.stuParam.Channel              = atoi(devId.c_str());
+    inParam.stuParam.Quality              = 6;
+    inParam.stuParam.ImageSize            = 2;
+    inParam.stuParam.mode                 = 0;
 
     NET_OUT_SNAP_PIC_TO_FILE_PARAM outParam = {0};
-    outParam.dwSize = sizeof(NET_OUT_SNAP_PIC_TO_FILE_PARAM);
-    outParam.szPicBuf = (char *)imgBuf;
-    outParam.dwPicBufLen = imgBufSize;
+    outParam.dwSize                         = sizeof(NET_OUT_SNAP_PIC_TO_FILE_PARAM);
+    outParam.szPicBuf                       = (char *)imgBuf;
+    outParam.dwPicBufLen                    = imgBufSize;
 
-    //clear
+    // clear
     imgBufSize = 0;
 
     CHECK(CLIENT_SnapPictureToFile(handle_, &inParam, &outParam, TIMEOUT), "CLIENT_SnapPictureToFile");
@@ -948,46 +1028,45 @@ int32_t SdkStubImpl::SnapPicture(const std::string &devId, uint8_t *imgBuf, uint
 }
 
 int32_t SdkStubImpl::GetFtp(const std::string &devId, FtpInfo &ftpInfo) {
-    DHDEV_FTP_PROTO_CFG ftpCfg = { 0 };
-    DWORD bytesReturn = 0;
-    CHECK(CLIENT_GetDevConfig(handle_, DH_DEV_FTP_PROTO_CFG, atoi(devId.c_str()), &ftpCfg, sizeof(DHDEV_FTP_PROTO_CFG),
-                              &bytesReturn),
+    DHDEV_FTP_PROTO_CFG ftpCfg = {0};
+    DWORD bytesReturn          = 0;
+    CHECK(CLIENT_GetDevConfig(handle_, DH_DEV_FTP_PROTO_CFG, atoi(devId.c_str()), &ftpCfg, sizeof(DHDEV_FTP_PROTO_CFG), &bytesReturn),
           "CLIENT_GetDevConfig");
-    ftpInfo.enable = ftpCfg.bEnable;
-    ftpInfo.hostIp = ftpCfg.szHostIp;
+    ftpInfo.enable   = ftpCfg.bEnable;
+    ftpInfo.hostIp   = ftpCfg.szHostIp;
     ftpInfo.hostPort = ftpCfg.wHostPort;
-    ftpInfo.user = ftpCfg.szUserName;
+    ftpInfo.user     = ftpCfg.szUserName;
     ftpInfo.password = ftpCfg.szPassword;
-    ftpInfo.dir0 = ftpCfg.szDirName;
+    ftpInfo.dir0     = ftpCfg.szDirName;
     return 0;
 }
 
 int32_t SdkStubImpl::SetFtp(const std::string &devId, const FtpInfo &ftpInfo) {
-    DHDEV_FTP_PROTO_CFG ftpCfg = { 0 };
-    ftpCfg.bEnable = ftpInfo.enable;
+    DHDEV_FTP_PROTO_CFG ftpCfg = {0};
+    ftpCfg.bEnable             = ftpInfo.enable;
     strcpy(ftpCfg.szHostIp, ftpInfo.hostIp.c_str());
     ftpCfg.wHostPort = ftpInfo.hostPort;
     strcpy(ftpCfg.szUserName, ftpInfo.user.c_str());
     strcpy(ftpCfg.szPassword, ftpInfo.password.c_str());
     strcpy(ftpCfg.szDirName, ftpInfo.dir0.c_str());
-    CHECK(CLIENT_SetDevConfig(handle_, DH_DEV_FTP_PROTO_CFG, atoi(devId.c_str()), &ftpCfg, sizeof(DHDEV_FTP_PROTO_CFG)),
-          "CLIENT_GetDevConfig");
+    CHECK(CLIENT_SetDevConfig(handle_, DH_DEV_FTP_PROTO_CFG, atoi(devId.c_str()), &ftpCfg, sizeof(DHDEV_FTP_PROTO_CFG)), "CLIENT_GetDevConfig");
     return 0;
 }
 
-int32_t SdkStubImpl::QueryVisitorsFlowRateHistory(const std::string &devId, int32_t granularity,
-        const TimePoint &startTime, const TimePoint &endTime, std::vector<VisitorsFlowRateHistory> &histories) {
+int32_t SdkStubImpl::QueryVisitorsFlowRateHistory(const std::string &devId, int32_t granularity, const TimePoint &startTime, const TimePoint &endTime,
+                                                  std::vector<VisitorsFlowRateHistory> &histories) {
 
-    NET_IN_FINDNUMBERSTAT inParam = { sizeof(NET_IN_FINDNUMBERSTAT) };
-    inParam.nChannelID = atoi(devId.c_str());
+    NET_IN_FINDNUMBERSTAT inParam = {sizeof(NET_IN_FINDNUMBERSTAT)};
+    inParam.nChannelID            = atoi(devId.c_str());
     //  查询粒度0：分钟，1：小时，2：日，3：周，4：月，5：季，6：年
     inParam.nGranularityType = granularity;
-    inParam.nWaittime = TIMEOUT;
+    inParam.nWaittime        = TIMEOUT;
     fromTimePoint(startTime, inParam.stStartTime);
     fromTimePoint(endTime, inParam.stEndTime);
-    NET_OUT_FINDNUMBERSTAT outParam{ sizeof(NET_OUT_FINDNUMBERSTAT) };
+    NET_OUT_FINDNUMBERSTAT outParam{sizeof(NET_OUT_FINDNUMBERSTAT)};
 
-    STUB_LLOG_INFO("Start to query visitors flow rate history, devId {}, granularity {}, startTime {}, endTime {}",
+    STUB_LLOG_INFO("Start to query visitors flow rate history, devId {}, "
+                   "granularity {}, startTime {}, endTime {}",
                    devId, granularity, startTime.ToString(), endTime.ToString());
 
     LLONG findHand = CLIENT_StartFindNumberStat(handle_, &inParam, &outParam);
@@ -1001,15 +1080,15 @@ int32_t SdkStubImpl::QueryVisitorsFlowRateHistory(const std::string &devId, int3
     int limit = 100;
 
     while (true) {
-        NET_IN_DOFINDNUMBERSTAT inDoFind = { sizeof(NET_IN_DOFINDNUMBERSTAT) };
-        NET_OUT_DOFINDNUMBERSTAT outDoFind = { sizeof(NET_OUT_DOFINDNUMBERSTAT) };
-        inDoFind.nBeginNumber = start;
-        inDoFind.nCount = limit;
-        inDoFind.nWaittime = TIMEOUT;
+        NET_IN_DOFINDNUMBERSTAT inDoFind   = {sizeof(NET_IN_DOFINDNUMBERSTAT)};
+        NET_OUT_DOFINDNUMBERSTAT outDoFind = {sizeof(NET_OUT_DOFINDNUMBERSTAT)};
+        inDoFind.nBeginNumber              = start;
+        inDoFind.nCount                    = limit;
+        inDoFind.nWaittime                 = TIMEOUT;
 
         std::unique_ptr<DH_NUMBERSTAT[]> stats(new DH_NUMBERSTAT[limit]);
         outDoFind.pstuNumberStat = stats.get();
-        outDoFind.nBufferLen = limit * sizeof(DH_NUMBERSTAT);
+        outDoFind.nBufferLen     = limit * sizeof(DH_NUMBERSTAT);
         for (int i = 0; i < limit; i++) {
             outDoFind.pstuNumberStat[i].dwSize = sizeof(DH_NUMBERSTAT);
         }
@@ -1018,13 +1097,13 @@ int32_t SdkStubImpl::QueryVisitorsFlowRateHistory(const std::string &devId, int3
         for (int i = 0; i < outDoFind.nCount; i++) {
             sdkproxy::sdk::VisitorsFlowRateHistory his;
             DH_NUMBERSTAT &data = outDoFind.pstuNumberStat[i];
-            his.ruleName = data.szRuleName;
-            his.startDateTime = netTimeToString(data.stuStartTime);
-            his.endDateTime = netTimeToString(data.stuEndTime);
-            his.inTotal = data.nEnteredSubTotal;
-            his.outTotal = data.nExitedSubtotal;
-            his.avgInside = data.nAvgInside;
-            his.maxInside = data.nMaxInside;
+            his.ruleName        = data.szRuleName;
+            his.startDateTime   = netTimeToString(data.stuStartTime);
+            his.endDateTime     = netTimeToString(data.stuEndTime);
+            his.inTotal         = data.nEnteredSubTotal;
+            his.outTotal        = data.nExitedSubtotal;
+            his.avgInside       = data.nAvgInside;
+            his.maxInside       = data.nMaxInside;
             histories.push_back(his);
         }
 
@@ -1041,6 +1120,6 @@ int32_t SdkStubImpl::QueryVisitorsFlowRateHistory(const std::string &devId, int3
     return 0;
 }
 
-}
-}
-}
+} // namespace dahuanvr
+} // namespace sdk
+} // namespace sdkproxy

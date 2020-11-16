@@ -12,36 +12,26 @@ namespace sdkproxy {
 
 class HttpRequestParser {
 public:
-    const std::string PARAM_IP = "ip";
-    const std::string PARAM_USEER = "user";
-    const std::string PARAM_PASSWORD = "password";
+    const std::string PARAM_IP         = "ip";
+    const std::string PARAM_USEER      = "user";
+    const std::string PARAM_PASSWORD   = "password";
     const std::string PARAM_CHANNEL_IP = "channelIp";
 
 public:
-    HttpRequestParser(brpc::Controller *cntl) {
-        cntl_ = cntl;
-    }
+    HttpRequestParser(brpc::Controller *cntl) { cntl_ = cntl; }
 
     void SetResponseError(int status, const std::string &msg) {
         cntl_->http_response().set_status_code(status);
         cntl_->response_attachment().append(msg);
     }
 
-    std::string GetIp() {
-        return GetQueryByKey(PARAM_IP);
-    }
+    std::string GetIp() { return GetQueryByKey(PARAM_IP); }
 
-    std::string GetChannelIp() {
-        return GetQueryByKey(PARAM_CHANNEL_IP);
-    }
+    std::string GetChannelIp() { return GetQueryByKey(PARAM_CHANNEL_IP); }
 
-    std::string GetUser() {
-        return GetQueryByKey(PARAM_USEER);
-    }
+    std::string GetUser() { return GetQueryByKey(PARAM_USEER); }
 
-    std::string GetPassword() {
-        return GetQueryByKey(PARAM_PASSWORD);
-    }
+    std::string GetPassword() { return GetQueryByKey(PARAM_PASSWORD); }
 
     std::string GetQueryByKey(const std::string &key) const {
         const std::string *value = cntl_->http_request().uri().GetQuery(key);
@@ -70,9 +60,8 @@ public:
 private:
     //是否存在基本参数
     bool validateBasicParams() {
-        if (GetQueryByKey(PARAM_USEER).empty() ||
-                GetQueryByKey(PARAM_PASSWORD).empty() ||
-                GetQueryByKey(PARAM_IP).empty()) {
+        if (GetQueryByKey(PARAM_USEER).empty() || GetQueryByKey(PARAM_PASSWORD).empty() || GetQueryByKey(PARAM_IP).empty()) {
+            LOG_ERROR("Invalid arguments");
             SetResponseError(brpc::HTTP_STATUS_BAD_REQUEST, "Invalid arguments");
             return false;
         }
@@ -82,4 +71,4 @@ private:
 private:
     brpc::Controller *cntl_;
 };
-}
+} // namespace sdkproxy
